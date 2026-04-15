@@ -1,0 +1,10 @@
+{
+  "name": "BizSim.Google.Play.AppUpdate.UniTask",
+  "rootNamespace": "BizSim.Google.Play.AppUpdate.UniTask",
+  "references": ["BizSim.Google.Play.AppUpdate"],
+  "includePlatforms": ["Android", "Editor"],
+  "defineConstraints": ["BIZSIM_UNITASK"],
+  "versionDefines": [
+    { "name": "com.cysharp.unitask", "expression": "", "define": "BIZSIM_UNITASK" }
+  ]
+}
