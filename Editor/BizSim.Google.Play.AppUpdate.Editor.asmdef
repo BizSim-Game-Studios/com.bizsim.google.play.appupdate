@@ -1,0 +1,17 @@
+{
+  "name": "BizSim.Google.Play.AppUpdate.Editor",
+  "rootNamespace": "BizSim.Google.Play.AppUpdate.Editor",
+  "references": [
+    "BizSim.Google.Play.AppUpdate",
+    "BizSim.Google.Play.Editor.Core"
+  ],
+  "includePlatforms": ["Editor"],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": false
+}
