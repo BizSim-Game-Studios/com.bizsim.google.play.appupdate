@@ -8,7 +8,7 @@ namespace BizSim.Google.Play.AppUpdate.EditorTests
 {
     public class AppUpdateSettingsAssetTests
     {
-        private const string PATH = "Assets/Resources/BizSim/GooglePlay/AppUpdateSettings.asset";
+        private static readonly string PATH = AppUpdateSettings.AssetDatabasePath;
 
         [TearDown]
         public void TearDown()

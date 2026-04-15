@@ -6,24 +6,25 @@ namespace BizSim.Google.Play.AppUpdate.Editor
 {
     internal static class AppUpdateSettingsAsset
     {
-        private const string FOLDER = "Assets/Resources/BizSim/GooglePlay";
-        private const string PATH   = FOLDER + "/AppUpdateSettings.asset";
+        // Single source of truth for the asset path — see CROSS-INVARIANTS §12.5.
+        private static readonly string AssetPath   = AppUpdateSettings.AssetDatabasePath;
+        private static readonly string AssetFolder = Path.GetDirectoryName(AssetPath).Replace('\\', '/');
 
         public static AppUpdateSettings LoadOrCreate()
         {
-            var existing = AssetDatabase.LoadAssetAtPath<AppUpdateSettings>(PATH);
+            var existing = AssetDatabase.LoadAssetAtPath<AppUpdateSettings>(AssetPath);
             if (existing != null) return existing;
 
-            EnsureFolder(FOLDER);
+            EnsureFolder(AssetFolder);
             var inst = ScriptableObject.CreateInstance<AppUpdateSettings>();
-            AssetDatabase.CreateAsset(inst, PATH);
+            AssetDatabase.CreateAsset(inst, AssetPath);
             AssetDatabase.SaveAssets();
             return inst;
         }
 
         public static void Save()
         {
-            var asset = AssetDatabase.LoadAssetAtPath<AppUpdateSettings>(PATH);
+            var asset = AssetDatabase.LoadAssetAtPath<AppUpdateSettings>(AssetPath);
             if (asset == null) return;
             EditorUtility.SetDirty(asset);
             AssetDatabase.SaveAssetIfDirty(asset);
@@ -41,7 +42,7 @@ namespace BizSim.Google.Play.AppUpdate.Editor
         private static void EnsureFolder(string path)
         {
             if (AssetDatabase.IsValidFolder(path)) return;
-            var parent = Path.GetDirectoryName(path)!.Replace('\\', '/');
+            var parent = Path.GetDirectoryName(path).Replace('\\', '/');
             EnsureFolder(parent);
             AssetDatabase.CreateFolder(parent, Path.GetFileName(path));
         }
