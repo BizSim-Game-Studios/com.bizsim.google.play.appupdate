@@ -1,0 +1,9 @@
+-keep class com.google.android.play.core.appupdate.** { *; }
+-keep class com.google.android.play.core.install.** { *; }
+-keep class com.google.android.play.core.install.model.** { *; }
+-keep class com.google.android.play.core.appupdate.testing.** { *; }
+-keep class com.google.android.gms.tasks.** { *; }
+-keep class com.bizsim.google.play.appupdate.AppUpdateBridge { *; }
+-keep class com.bizsim.google.play.appupdate.AppUpdateBridge$* { *; }
+-keep class com.bizsim.google.play.appupdate.AppUpdateResultFragment { *; }
+-keep class com.bizsim.google.play.appupdate.InstallStateListenerBridge { *; }
