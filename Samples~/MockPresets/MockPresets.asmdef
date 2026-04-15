@@ -1,0 +1,7 @@
+{
+  "name": "BizSim.Google.Play.AppUpdate.Samples.MockPresets",
+  "rootNamespace": "BizSim.Google.Play.AppUpdate.Samples.MockPresets",
+  "references": ["BizSim.Google.Play.AppUpdate"],
+  "includePlatforms": ["Editor"],
+  "autoReferenced": false
+}
