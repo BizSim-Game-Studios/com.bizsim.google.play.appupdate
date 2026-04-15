@@ -1,0 +1,7 @@
+{
+  "name": "BizSim.Google.Play.AppUpdate.Samples.BasicIntegration",
+  "rootNamespace": "BizSim.Google.Play.AppUpdate.Samples.BasicIntegration",
+  "references": ["BizSim.Google.Play.AppUpdate"],
+  "includePlatforms": ["Android", "Editor"],
+  "autoReferenced": false
+}
