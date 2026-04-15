@@ -16,6 +16,7 @@ namespace BizSim.Google.Play.AppUpdate.Samples.MockPresets
             Create("Mock_NoUpdate", p =>
             {
                 p.SimulatedAvailability = UpdateAvailability.UpdateNotAvailable;
+                p.SimulatedUpdatePriority = 0;
                 p.AllowFlexible = false;
                 p.AllowImmediate = false;
             });
@@ -80,6 +81,7 @@ namespace BizSim.Google.Play.AppUpdate.Samples.MockPresets
             Create("Mock_Play_Store_Not_Found", p =>
             {
                 p.SimulatedAvailability = UpdateAvailability.Unknown;
+                p.SimulatedUpdatePriority = 0;
                 p.AllowFlexible = false;
                 p.AllowImmediate = false;
                 p.SimulatedErrorCode = InstallErrorCode.ErrorPlayStoreNotFound;
@@ -88,6 +90,7 @@ namespace BizSim.Google.Play.AppUpdate.Samples.MockPresets
             Create("Mock_Sideloaded_Install", p =>
             {
                 p.SimulatedAvailability = UpdateAvailability.UpdateNotAvailable;
+                p.SimulatedUpdatePriority = 0;
                 p.AllowFlexible = false;
                 p.AllowImmediate = false;
                 p.SimulatedErrorCode = InstallErrorCode.ErrorAppNotOwned;

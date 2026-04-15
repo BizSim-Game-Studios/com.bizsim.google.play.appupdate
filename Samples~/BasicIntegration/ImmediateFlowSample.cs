@@ -45,6 +45,10 @@ namespace BizSim.Google.Play.AppUpdate.Samples.BasicIntegration
         private async void OnApplicationFocus(bool focused)
         {
             if (!focused) return;
+            // Avoid racing the initial Start() check — OnApplicationFocus(true) fires once
+            // at scene-load on most platforms, which would otherwise issue two concurrent
+            // CheckForUpdateAsync calls back-to-back on first run.
+            if (!_started) return;
 
             // Re-check on every focus regain — Google's guide insists on this.
             AppUpdateInfo info;
