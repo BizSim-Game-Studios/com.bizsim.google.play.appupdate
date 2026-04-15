@@ -63,7 +63,9 @@ namespace BizSim.Google.Play.AppUpdate
 
             // Post-r5 per CROSS-INVARIANTS §12: load project-wide Settings asset.
             _settings = Resources.Load<AppUpdateSettings>(AppUpdateSettings.ResourcesLoadKey);
-            int  queueCap          = _settings != null ? _settings.InstallStateQueueCapacity : 32;
+            int  queueCap          = _settings != null
+                ? _settings.InstallStateQueueCapacity
+                : AppUpdateSettings.DefaultInstallStateQueueCapacity;
             bool autoStartListener = _settings == null || _settings.AutoStartInstallStateListener;
             _installStateStream    = new InstallStateStream(maxCapacity: queueCap);
 
@@ -208,7 +210,9 @@ namespace BizSim.Google.Play.AppUpdate
         }
 
         private float ResolveTimeout(float caller)
-            => caller > 0f ? caller : (_settings != null ? _settings.DefaultTimeoutSeconds : 60f);
+            => caller > 0f
+                ? caller
+                : (_settings != null ? _settings.DefaultTimeoutSeconds : AppUpdateSettings.DefaultTimeoutSecondsFallback);
 
         private void HandleState(InstallState s)
         {
@@ -234,6 +238,7 @@ namespace BizSim.Google.Play.AppUpdate
 
         private void OnDestroy()
         {
+            if (_stateListener != null) _stateListener.OnStateUpdate -= HandleState;
             if (_instance == this) _instance = null;
         }
 

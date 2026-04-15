@@ -80,6 +80,13 @@ namespace BizSim.Google.Play.AppUpdate
             Action<AppUpdateError> errorHandler = e => completion.TrySetResult(e);
             Action completeHandler = () => completion.TrySetResult(null);
 
+            // Defensive cleanup — controller's _flexibleInFlight flag prevents re-entry in normal
+            // usage, but consumers who use MockAppUpdateProvider directly could leak replayers.
+            if (_currentReplayer != null && _currentReplayer.gameObject != null)
+            {
+                UnityEngine.Object.Destroy(_currentReplayer.gameObject);
+                _currentReplayer = null;
+            }
             _currentReplayer = MockInstallStateReplayer.Spawn(_cfg, stateHandler, errorHandler, completeHandler);
 
             using (ct.Register(() => completion.TrySetCanceled(ct)))
