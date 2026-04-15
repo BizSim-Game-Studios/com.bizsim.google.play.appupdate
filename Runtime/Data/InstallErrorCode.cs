@@ -14,7 +14,7 @@ namespace BizSim.Google.Play.AppUpdate
         ErrorAppNotOwned        = -10,
         ErrorInternalError      = -100,
 
-        // BizSim extensions — stay below -200 (also mirrored by AppUpdateErrorCodes constants).
+        // BizSim extensions — stay below -200.
         BridgeNotInitialized = -200,
         Timeout              = -201,
         CancelledByCaller    = -202,
