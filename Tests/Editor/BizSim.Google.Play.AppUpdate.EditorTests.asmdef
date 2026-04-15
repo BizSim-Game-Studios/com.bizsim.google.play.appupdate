@@ -1,0 +1,16 @@
+{
+  "name": "BizSim.Google.Play.AppUpdate.EditorTests",
+  "rootNamespace": "BizSim.Google.Play.AppUpdate.EditorTests",
+  "references": [
+    "BizSim.Google.Play.AppUpdate",
+    "BizSim.Google.Play.AppUpdate.Editor",
+    "UnityEngine.TestRunner",
+    "UnityEditor.TestRunner"
+  ],
+  "includePlatforms": ["Editor"],
+  "optionalUnityReferences": ["TestAssemblies"],
+  "overrideReferences": true,
+  "precompiledReferences": ["nunit.framework.dll"],
+  "autoReferenced": false,
+  "defineConstraints": ["UNITY_INCLUDE_TESTS"]
+}
