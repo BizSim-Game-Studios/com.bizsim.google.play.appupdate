@@ -55,13 +55,37 @@ namespace BizSim.Google.Play.AppUpdate.Editor
                     "Raise Player Settings → Android → Minimum API Level to Android 5.0 (API 21) or higher.");
             }
 
-            // Compatibility probe: the fragment shim requires FragmentActivity host.
-            if (!CompatibilityProbe.HasFragmentActivityOrGameActivity())
+            // T51 Wave 3: Three-state FragmentActivity probe.
+            // GameActivity → pass (inherits FragmentActivity natively).
+            // ClassicUnityPlayerActivity → warning (works on most Unity 6 projects, but the
+            //   fragment shim may not attach if GameActivity is not the default entry point).
+            // CustomNonFragmentActivity → error (custom activity that does NOT extend
+            //   FragmentActivity — fragment shim WILL throw ClassCastException).
+            var activityState = CompatibilityProbe.Probe();
+            switch (activityState)
             {
-                Debug.LogWarning(BizSimLogger.Prefix +
-                    "No FragmentActivity override or GameActivity detected in " +
-                    "Assets/Plugins/Android/. The fragment shim will throw ClassCastException at runtime. " +
-                    "See Documentation~/UNITY_ACTIVITY_OVERRIDE.md.");
+                case CompatibilityProbe.FragmentActivityState.GameActivity:
+                case CompatibilityProbe.FragmentActivityState.FragmentActivityOverride:
+                    // Pass — fragment shim will work.
+                    break;
+
+                case CompatibilityProbe.FragmentActivityState.ClassicUnityPlayerActivity:
+                    Debug.LogWarning(BizSimLogger.Prefix +
+                        "No custom activity override detected — Unity's default UnityPlayerActivity will be used. " +
+                        "On Unity 6 with GameActivity as the default entry point this is fine. If your project " +
+                        "uses the classic UnityPlayerActivity (which does NOT extend FragmentActivity), the " +
+                        "fragment shim may throw ClassCastException at runtime. " +
+                        "See Documentation~/UNITY_ACTIVITY_OVERRIDE.md for override instructions.");
+                    break;
+
+                case CompatibilityProbe.FragmentActivityState.CustomNonFragmentActivity:
+                    Debug.LogError(BizSimLogger.Prefix +
+                        "A custom Android activity was detected in Assets/Plugins/Android/ but it does NOT " +
+                        "extend FragmentActivity or AppCompatActivity. The In-App Updates fragment shim " +
+                        "WILL throw ClassCastException at runtime. Change your custom activity to extend " +
+                        "androidx.fragment.app.FragmentActivity (or AppCompatActivity which inherits it). " +
+                        "See Documentation~/UNITY_ACTIVITY_OVERRIDE.md.");
+                    break;
             }
 
             // T26 Wave 1: watchdog < default timeout sanity check.
@@ -85,6 +109,13 @@ namespace BizSim.Google.Play.AppUpdate.Editor
                         "Dry-run mode only takes effect in DEVELOPMENT_BUILD — it will be inactive in this build. " +
                         "Consider disabling it to avoid confusion.");
                 }
+            }
+
+            // T49/T50 Wave 3: ProGuard keep-rule validation.
+            var proguardWarnings = AppUpdateProguardValidator.Validate();
+            foreach (var w in proguardWarnings)
+            {
+                Debug.LogWarning(BizSimLogger.Prefix + w);
             }
         }
 
