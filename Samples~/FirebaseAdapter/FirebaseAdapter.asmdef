@@ -1,0 +1,14 @@
+{
+  "name": "BizSim.Google.Play.AppUpdate.Samples.FirebaseAdapter",
+  "rootNamespace": "BizSim.Google.Play.AppUpdate.Samples.FirebaseAdapter",
+  "references": ["BizSim.Google.Play.AppUpdate"],
+  "includePlatforms": ["Android", "Editor"],
+  "autoReferenced": false,
+  "versionDefines": [
+    {
+      "name": "com.google.firebase.analytics",
+      "expression": "",
+      "define": "BIZSIM_FIREBASE"
+    }
+  ]
+}
