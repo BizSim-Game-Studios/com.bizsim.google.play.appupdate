@@ -16,7 +16,8 @@
   "samples": [
     { "displayName": "Basic Integration", "description": "Full bootstrap with policy engine, preload, flexible/immediate flows, remind-later, and download progress adapter.", "path": "Samples~/BasicIntegration" },
     { "displayName": "Mock Config Presets", "description": "Pre-configured mock scenarios covering both flows and resume-in-progress.", "path": "Samples~/MockPresets" },
-    { "displayName": "Firebase Analytics Adapter", "description": "Reference IAppUpdateAnalyticsAdapterV2 implementation logging all 25 events to Firebase Analytics.", "path": "Samples~/FirebaseAdapter" }
+    { "displayName": "Firebase Analytics Adapter", "description": "Reference IAppUpdateAnalyticsAdapterV2 implementation logging all 25 events to Firebase Analytics.", "path": "Samples~/FirebaseAdapter" },
+    { "displayName": "Policy Presets", "description": "Pre-configured IAppUpdateConfigSource ScriptableObjects for common update policies (immediate-only, staleness-gated, session+staleness hybrid).", "path": "Samples~/PolicyPresets" }
   ],
   "dependencies": {
     "com.google.external-dependency-manager": "1.2.187"

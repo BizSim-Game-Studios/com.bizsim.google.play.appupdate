@@ -1,0 +1,7 @@
+{
+  "name": "BizSim.Google.Play.AppUpdate.Samples.PolicyPresets",
+  "rootNamespace": "BizSim.Google.Play.AppUpdate.Samples.PolicyPresets",
+  "references": ["BizSim.Google.Play.AppUpdate"],
+  "includePlatforms": ["Editor"],
+  "autoReferenced": false
+}
