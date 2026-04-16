@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-04-16
+
+### Added
+- ProGuard build-time validator for AppUpdateBridge, AppUpdateResultFragment, InstallStateListenerBridge
+- FragmentActivity conditional probe: pass (GameActivity), warn (classic), error (custom non-FragmentActivity)
+- Internal `IClock` + `SystemClock` for staleness math testability (S10 security — not public)
+- Fragment shim request code tests (0x42F1 flexible, 0x42F2 immediate)
+- Policy preset ScriptableObjects: PriorityFiveImmediateOnly, StalenessSevenDayFlexible, HybridSessionStaleness
+- `WriteDiagnosticSnapshot(path)` file writer (development builds only, S2 security)
+- `Documentation~/UPGRADE-1.x.md` consumer upgrade guide (1.0 → 1.3 path)
+- `Documentation~/TELEMETRY-DASHBOARD.md` Firebase dashboard template with 19-event funnel + BigQuery SQL
+
 ## [1.2.0] - 2026-04-16
 
 ### Added
