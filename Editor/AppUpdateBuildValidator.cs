@@ -63,6 +63,29 @@ namespace BizSim.Google.Play.AppUpdate.Editor
                     "Assets/Plugins/Android/. The fragment shim will throw ClassCastException at runtime. " +
                     "See Documentation~/UNITY_ACTIVITY_OVERRIDE.md.");
             }
+
+            // T26 Wave 1: watchdog < default timeout sanity check.
+            var settings = AssetDatabase.LoadAssetAtPath<AppUpdateSettings>(AppUpdateSettings.AssetDatabasePath);
+            if (settings != null)
+            {
+                if (settings.WatchdogTimeoutSeconds < settings.DefaultTimeoutSeconds)
+                {
+                    Debug.LogWarning(BizSimLogger.Prefix +
+                        $"WatchdogTimeoutSeconds ({settings.WatchdogTimeoutSeconds}s) is less than " +
+                        $"DefaultTimeoutSeconds ({settings.DefaultTimeoutSeconds}s). The watchdog may cancel " +
+                        "CheckForUpdateAsync before the provider's own timeout fires. " +
+                        "This is usually intentional but verify via BizSim > Google Play > App Update > Configuration.");
+                }
+
+                // Dry-run mode should not ship in release builds.
+                if (settings.DryRunMode && !EditorUserBuildSettings.development)
+                {
+                    Debug.LogWarning(BizSimLogger.Prefix +
+                        "DryRunMode is enabled in AppUpdateSettings but this is a release build. " +
+                        "Dry-run mode only takes effect in DEVELOPMENT_BUILD — it will be inactive in this build. " +
+                        "Consider disabling it to avoid confusion.");
+                }
+            }
         }
 
         private static bool HasEdm4U()
