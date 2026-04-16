@@ -12,12 +12,16 @@ namespace BizSim.Google.Play.AppUpdate.Editor
 
         private Vector2 _scroll;
         private SerializedObject _settingsSO;
+        private bool _policyFoldout = true;
+        private bool _remoteConfigFoldout = true;
+        private bool _consentFoldout = true;
+        private bool _diagnosticsFoldout;
 
         [MenuItem("BizSim/Google Play/App Update/Configuration", false, 100)]
         public static void ShowWindow()
         {
             var w = GetWindow<AppUpdateConfiguration>("BizSim App Update");
-            w.minSize = new Vector2(480, 500);
+            w.minSize = new Vector2(480, 600);
             w.Show();
         }
 
@@ -35,6 +39,14 @@ namespace BizSim.Google.Play.AppUpdate.Editor
             DrawActivityCompatibilityCheck();
             EditorGUILayout.Space(8);
             DrawSettingsSection();
+            EditorGUILayout.Space(8);
+            DrawPolicyEngineSection();
+            EditorGUILayout.Space(8);
+            DrawRemoteConfigSection();
+            EditorGUILayout.Space(8);
+            DrawConsentGateSection();
+            EditorGUILayout.Space(8);
+            DrawDiagnosticsSection();
             EditorGUILayout.Space(8);
             DrawFirebaseSection();
             EditorGUILayout.Space(8);
@@ -114,6 +126,138 @@ namespace BizSim.Google.Play.AppUpdate.Editor
                     BizSimLogger.InvalidateCache();
                 }
             }
+        }
+
+        private void DrawPolicyEngineSection()
+        {
+            _policyFoldout = EditorGUILayout.Foldout(_policyFoldout, "Policy Engine (Wave 1)", true, EditorStyles.foldoutHeader);
+            if (!_policyFoldout) return;
+
+            EditorGUI.indentLevel++;
+            EditorGUILayout.HelpBox(
+                "Controls when and how updates are prompted. The policy engine evaluates session count, " +
+                "days since install, update priority, and consent before deciding Flexible vs Immediate flow.",
+                MessageType.Info);
+
+            if (_settingsSO == null) OnEnable();
+            _settingsSO.Update();
+
+            EditorGUILayout.PropertyField(_settingsSO.FindProperty("ImmediatePriorityFloor"),
+                new GUIContent("Immediate Priority Floor", "Priority >= this triggers immediate update (0-5)."));
+            EditorGUILayout.PropertyField(_settingsSO.FindProperty("FirstRunGraceSessions"),
+                new GUIContent("Grace Period Sessions", "Minimum sessions before first update prompt."));
+            EditorGUILayout.PropertyField(_settingsSO.FindProperty("FirstRunGraceDays"),
+                new GUIContent("Grace Period Days", "Minimum days since install before first prompt."));
+            EditorGUILayout.PropertyField(_settingsSO.FindProperty("WatchdogTimeoutSeconds"),
+                new GUIContent("Watchdog Timeout (s)", "Internal timeout for check/flexible flows. Does NOT apply to immediate."));
+            EditorGUILayout.PropertyField(_settingsSO.FindProperty("OfflineGuardEnabled"),
+                new GUIContent("Offline Guard", "Skip update check when device is offline."));
+            EditorGUILayout.PropertyField(_settingsSO.FindProperty("DryRunMode"),
+                new GUIContent("Dry Run Mode", "Log policy decisions without invoking provider (dev builds only)."));
+
+            EditorGUILayout.Space(4);
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                if (GUILayout.Button("Apply Policy Settings"))
+                {
+                    _settingsSO.ApplyModifiedProperties();
+                    AppUpdateSettingsAsset.Save();
+                }
+                if (GUILayout.Button("Revert"))
+                {
+                    _settingsSO.Update();
+                }
+            }
+            EditorGUI.indentLevel--;
+        }
+
+        private void DrawRemoteConfigSection()
+        {
+            _remoteConfigFoldout = EditorGUILayout.Foldout(_remoteConfigFoldout, "Remote Config Source", true, EditorStyles.foldoutHeader);
+            if (!_remoteConfigFoldout) return;
+
+            EditorGUI.indentLevel++;
+            EditorGUILayout.HelpBox(
+                "At runtime the controller defaults to StaticAppUpdateConfigSource (always enabled, no remote overrides). " +
+                "Call SetConfigSource() from your startup code to wire Firebase Remote Config or a custom backend.",
+                MessageType.Info);
+
+            EditorGUILayout.LabelField("Default source:", "StaticAppUpdateConfigSource");
+            EditorGUILayout.LabelField("RemoteEnabled:", "true (static default)");
+
+            EditorGUILayout.Space(2);
+            EditorGUILayout.HelpBox(
+                "In development builds, a warning fires at Awake if no custom IAppUpdateConfigSource is set. " +
+                "This means the kill switch is not wired and you cannot disable updates remotely.",
+                MessageType.Warning);
+            EditorGUI.indentLevel--;
+        }
+
+        private void DrawConsentGateSection()
+        {
+            _consentFoldout = EditorGUILayout.Foldout(_consentFoldout, "Consent Gate", true, EditorStyles.foldoutHeader);
+            if (!_consentFoldout) return;
+
+            EditorGUI.indentLevel++;
+            EditorGUILayout.HelpBox(
+                "At runtime the controller defaults to AlwaysAllowConsentGate (prompts fire without consent check). " +
+                "For GDPR/DMA compliance, call SetConsentGate() with your CMP adapter.",
+                MessageType.Info);
+
+            EditorGUILayout.LabelField("Default gate:", "AlwaysAllowConsentGate");
+            EditorGUILayout.LabelField("IsConsented:", "true (always allows)");
+
+            EditorGUILayout.Space(2);
+            EditorGUILayout.HelpBox(
+                "In development builds, a warning fires at Awake if no custom IConsentGate is set. " +
+                "Wire a consent gate to suppress the warning and ensure GDPR/DMA compliance.",
+                MessageType.Warning);
+            EditorGUI.indentLevel--;
+        }
+
+        private void DrawDiagnosticsSection()
+        {
+            _diagnosticsFoldout = EditorGUILayout.Foldout(_diagnosticsFoldout, "Diagnostics (runtime snapshot)", true, EditorStyles.foldoutHeader);
+            if (!_diagnosticsFoldout) return;
+
+            EditorGUI.indentLevel++;
+
+            if (!Application.isPlaying)
+            {
+                EditorGUILayout.HelpBox(
+                    "Enter Play Mode to view a live diagnostic snapshot from AppUpdateController.Instance.GetDiagnosticSnapshot().",
+                    MessageType.Info);
+            }
+            else
+            {
+                var ctrl = AppUpdateController.Instance;
+                if (ctrl == null)
+                {
+                    EditorGUILayout.HelpBox("AppUpdateController.Instance is null.", MessageType.Warning);
+                }
+                else
+                {
+                    var snap = ctrl.GetDiagnosticSnapshot();
+                    EditorGUILayout.LabelField("Package version:", snap.PackageVersion);
+                    EditorGUILayout.LabelField("Timestamp:", snap.Timestamp);
+                    EditorGUILayout.LabelField("Session count:", snap.SessionCount.ToString());
+                    EditorGUILayout.LabelField("Launch count:", snap.LaunchCount.ToString());
+                    EditorGUILayout.LabelField("Days since install:", snap.DaysSinceInstall.ToString());
+                    EditorGUILayout.LabelField("Remote enabled:", snap.RemoteEnabled.ToString());
+                    EditorGUILayout.LabelField("Offline guard:", snap.OfflineGuardEnabled.ToString());
+                    EditorGUILayout.LabelField("Dry run:", snap.DryRunMode.ToString());
+                    EditorGUILayout.LabelField("Imm. priority floor:", snap.ImmediatePriorityFloor.ToString());
+                    EditorGUILayout.LabelField("Watchdog timeout:", $"{snap.WatchdogTimeoutSeconds}s");
+                    EditorGUILayout.LabelField("Last error:", snap.LastErrorCode ?? "(none)");
+
+                    EditorGUILayout.Space(4);
+                    if (GUILayout.Button("Copy Snapshot JSON"))
+                    {
+                        EditorGUIUtility.systemCopyBuffer = snap.ToJson();
+                    }
+                }
+            }
+            EditorGUI.indentLevel--;
         }
 
         private void DrawFirebaseSection()
