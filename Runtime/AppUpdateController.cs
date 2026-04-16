@@ -213,6 +213,27 @@ namespace BizSim.Google.Play.AppUpdate
         }
 
         /// <summary>
+        /// Writes a JSON diagnostic snapshot to disk. Only available in development builds and
+        /// the editor — release builds return <c>false</c> immediately. Callers should wrap in
+        /// a try/catch for I/O exceptions (invalid path, read-only filesystem, etc.).
+        /// </summary>
+        /// <param name="path">Absolute file path to write the JSON to.</param>
+        /// <returns><c>true</c> if the snapshot was written; <c>false</c> in release builds.</returns>
+        public bool WriteDiagnosticSnapshot(string path)
+        {
+            EnsureMainThread();
+#if DEVELOPMENT_BUILD || UNITY_EDITOR
+            var snapshot = GetDiagnosticSnapshot();
+            System.IO.File.WriteAllText(path, snapshot.ToJson());
+            BizSimLogger.Info($"Diagnostic snapshot written to {path}");
+            return true;
+#else
+            BizSimLogger.Warning("WriteDiagnosticSnapshot disabled in release builds");
+            return false;
+#endif
+        }
+
+        /// <summary>
         /// Returns a serializable snapshot of the current app-update subsystem state.
         /// Intended for diagnostics dashboards, support tickets, and debug logging.
         /// </summary>
