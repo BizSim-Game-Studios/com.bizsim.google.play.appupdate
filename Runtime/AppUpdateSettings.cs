@@ -58,5 +58,26 @@ namespace BizSim.Google.Play.AppUpdate
 
         [Tooltip("If true, Awake auto-starts the install state listener. Set to false to start it manually via StartInstallStateListener.")]
         public bool AutoStartInstallStateListener = true;
+
+        [Header("Policy Engine (Wave 1)")]
+        [Tooltip("Minimum sessions before first update prompt")]
+        public int FirstRunGraceSessions = 3;
+
+        [Tooltip("Minimum days since install before first update prompt")]
+        public int FirstRunGraceDays = 7;
+
+        [Tooltip("Priority floor for immediate updates (0-5). Only priority >= this triggers immediate.")]
+        [Range(0, 5)]
+        public int ImmediatePriorityFloor = 5;
+
+        [Tooltip("Internal watchdog timeout in seconds (3-120). Does NOT apply to immediate flow user interaction.")]
+        [Range(3, 120)]
+        public int WatchdogTimeoutSeconds = 15;
+
+        [Tooltip("Skip update check when device is offline")]
+        public bool OfflineGuardEnabled = true;
+
+        [Tooltip("Log full policy decision tree without invoking provider (dev builds only)")]
+        public bool DryRunMode;
     }
 }
