@@ -5,7 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using UnityEngine;
 
-#pragma warning disable CS4014 // fire-and-forget for CheckStalledImmediateUpdateAsync
+#pragma warning disable CS4014 // fire-and-forget for CheckStalledImmediateUpdateAsync and RemindLaterAutoCompleteAsync
 
 namespace BizSim.Google.Play.AppUpdate
 {
@@ -58,6 +58,13 @@ namespace BizSim.Google.Play.AppUpdate
 
         // Wave 1 — watchdog CancellationTokenSource (immediate flow exempt per H4).
         private CancellationTokenSource _watchdogCts;
+
+        // Wave 2 — preload cache.
+        private AppUpdateInfo? _preloadedInfo;
+        private DateTime _preloadedAtUtc;
+
+        // Wave 2 — remind-later CTS for auto-complete timer.
+        private CancellationTokenSource _remindLaterCts;
 
         // Thread-safe last-state cache — lock required because install state listener may fire
         // on background thread before UnityMainThreadDispatcher marshals.
@@ -164,12 +171,14 @@ namespace BizSim.Google.Play.AppUpdate
         /// Replace the default config source (which always returns <c>RemoteEnabled = true</c>
         /// with all-null overrides). Call this early in your startup to wire a Firebase Remote
         /// Config or similar backend. The engine is reconstructed with the new source.
+        /// Also invalidates the preload cache (Wave 2).
         /// </summary>
         public void SetConfigSource(IAppUpdateConfigSource source)
         {
             EnsureMainThread();
             _configSource = source ?? throw new ArgumentNullException(nameof(source));
             RebuildPolicyEngine();
+            InvalidatePreloadCache();
         }
 
         /// <summary>
@@ -235,16 +244,143 @@ namespace BizSim.Google.Play.AppUpdate
             return snapshot;
         }
 
+        // ---------------------------------------------------------------
+        // Wave 2 — PreloadAppUpdateInfoAsync (Task 34)
+        // ---------------------------------------------------------------
+
+        /// <summary>
+        /// Pre-fetches <see cref="AppUpdateInfo"/> and caches it for the TTL configured in
+        /// <see cref="AppUpdateSettings.PreloadCacheTtlMinutes"/> (default 15 min). Subsequent
+        /// calls within the TTL return the cached result. The cache is invalidated on
+        /// <c>OnApplicationPause(false)</c> and <see cref="SetConfigSource"/>.
+        /// </summary>
+        public async Task<AppUpdateInfo> PreloadAppUpdateInfoAsync(CancellationToken ct = default)
+        {
+            EnsureMainThread();
+
+            // Return cached if still valid.
+            if (_preloadedInfo.HasValue)
+            {
+                int ttlMinutes = _settings != null
+                    ? _settings.PreloadCacheTtlMinutes
+                    : AppUpdateSettings.DefaultPreloadCacheTtlMinutes;
+                if ((DateTime.UtcNow - _preloadedAtUtc).TotalMinutes < ttlMinutes)
+                {
+                    BizSimLogger.Verbose("PreloadAppUpdateInfoAsync: returning cached info.");
+                    return _preloadedInfo.Value;
+                }
+            }
+
+            var ctx = BuildTelemetryContext("preload");
+            SafeInvokeV2(v2 => v2.OnPreloadStarted(ctx));
+
+            var resolved = ResolveTimeout(-1f);
+            int watchdogMs = (_settings != null ? _settings.WatchdogTimeoutSeconds : 15) * 1000;
+            using var watchdogCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            watchdogCts.CancelAfter(watchdogMs);
+
+            AppUpdateInfo info;
+            try
+            {
+                info = await _infoProvider.GetAppUpdateInfoAsync(watchdogCts.Token, resolved);
+            }
+            catch (Exception ex)
+            {
+                var code = ClassifyExceptionErrorCode(ex);
+                var retryable = AppUpdateError.IsRetryable(code);
+                var err = new AppUpdateError(code, ex.Message, retryable, DateTime.UtcNow);
+                _lastError = err;
+                SafeInvokeV2(v2 => v2.OnPreloadFailed(err, ctx));
+                throw;
+            }
+
+            _preloadedInfo = info;
+            _preloadedAtUtc = DateTime.UtcNow;
+            _lastUpdateInfo = info;
+
+            SafeInvokeV2(v2 => v2.OnPreloadSucceeded(ctx));
+            BizSimLogger.Info("PreloadAppUpdateInfoAsync: info cached.");
+            return info;
+        }
+
+        /// <summary>
+        /// Invalidates the preload cache so the next <see cref="PreloadAppUpdateInfoAsync"/>
+        /// or <see cref="CheckForUpdateAsync"/> call will fetch fresh data.
+        /// </summary>
+        public void InvalidatePreloadCache()
+        {
+            _preloadedInfo = null;
+            BizSimLogger.Verbose("Preload cache invalidated.");
+        }
+
+        // ---------------------------------------------------------------
+        // Wave 2 — Per-version cooldown helpers (Task 35)
+        // ---------------------------------------------------------------
+
+        const string CooldownKeyPrefix = "bizsim_appupdate_cooldown_";
+
+        /// <summary>
+        /// Returns true if the given version code is in cooldown (the user was already
+        /// prompted within <see cref="AppUpdateSettings.PerVersionCooldownDays"/> days).
+        /// Priority-5 updates are EXEMPT from cooldown and always return false.
+        /// </summary>
+        bool IsVersionInCooldown(int versionCode, int updatePriority)
+        {
+            // Priority 5 is always exempt from cooldown.
+            if (updatePriority >= 5) return false;
+
+            int cooldownDays = _settings != null
+                ? _settings.PerVersionCooldownDays
+                : AppUpdateSettings.DefaultPerVersionCooldownDays;
+            if (cooldownDays <= 0) return false;
+
+            var key = CooldownKeyPrefix + versionCode;
+            var stored = PlayerPrefs.GetString(key, "");
+            if (string.IsNullOrEmpty(stored)) return false;
+
+            if (long.TryParse(stored, out var ticks))
+            {
+                var cooldownStart = new DateTime(ticks, DateTimeKind.Utc);
+                return (DateTime.UtcNow - cooldownStart).TotalDays < cooldownDays;
+            }
+
+            return false;
+        }
+
+        void RecordCooldownForVersion(int versionCode)
+        {
+            var key = CooldownKeyPrefix + versionCode;
+            PlayerPrefs.SetString(key, DateTime.UtcNow.Ticks.ToString());
+            PlayerPrefs.Save();
+        }
+
+        // ---------------------------------------------------------------
+        // Core check flow
+        // ---------------------------------------------------------------
+
         // Sentinel-value pattern per CROSS-INVARIANTS §12.2.1.
         public async Task<AppUpdateInfo> CheckForUpdateAsync(CancellationToken ct = default, float timeoutSeconds = -1f)
         {
             EnsureMainThread();
+
+            // Wave 2 — install-source guard (Task 40).
+            if (_settings != null && _settings.SkipNonPlayInstalls
+                && !AppUpdateInstallSourceDetector.IsPlayStoreInstall())
+            {
+                BizSimLogger.Info($"Install-source guard: installer is '{AppUpdateInstallSourceDetector.GetInstallerPackageName()}', not Play Store — skipping.");
+                var ctx = BuildTelemetryContext("install_source_blocked");
+                SafeInvokeV2(v2 => v2.OnNonPlayInstallBlocked(ctx));
+                throw new InvalidOperationException(
+                    "CheckForUpdateAsync skipped: app not installed from Play Store and SkipNonPlayInstalls is true.");
+            }
 
             // T21 offline guard — skip when device is unreachable.
             if (_settings != null && _settings.OfflineGuardEnabled
                 && Application.internetReachability == NetworkReachability.NotReachable)
             {
                 BizSimLogger.Info("Offline guard: skipping CheckForUpdateAsync — device is not reachable.");
+                var offlineCtx = BuildTelemetryContext("offline_blocked");
+                SafeInvokeV2(v2 => v2.OnOfflineBlocked(offlineCtx));
                 SafeInvokeAnalytics(a => a.OnError(new AppUpdateError(
                     InstallErrorCode.ErrorApiNotAvailable, "offline_blocked", false, DateTime.UtcNow)));
                 throw new InvalidOperationException(
@@ -259,41 +395,49 @@ namespace BizSim.Google.Play.AppUpdate
             watchdogCts.CancelAfter(watchdogMs);
 
             AppUpdateInfo info;
-            try
+
+            // Wave 2 — try preload cache first.
+            if (_preloadedInfo.HasValue)
             {
-                info = await _infoProvider.GetAppUpdateInfoAsync(watchdogCts.Token, resolved);
+                int ttlMinutes = _settings != null
+                    ? _settings.PreloadCacheTtlMinutes
+                    : AppUpdateSettings.DefaultPreloadCacheTtlMinutes;
+                if ((DateTime.UtcNow - _preloadedAtUtc).TotalMinutes < ttlMinutes)
+                {
+                    info = _preloadedInfo.Value;
+                    BizSimLogger.Verbose("CheckForUpdateAsync: using preloaded info.");
+                    _preloadedInfo = null; // consume once
+                }
+                else
+                {
+                    _preloadedInfo = null; // expired
+                    info = await FetchInfoWithWatchdog(watchdogCts, ct, resolved, watchdogMs);
+                }
             }
-            catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+            else
             {
-                var err = new AppUpdateError(
-                    InstallErrorCode.Timeout,
-                    $"CheckForUpdateAsync watchdog timeout ({watchdogMs}ms)",
-                    true, DateTime.UtcNow);
-                _lastError = err;
-                SafeInvokeAnalytics(a => a.OnError(err));
-                OnError?.Invoke(err);
-                throw;
-            }
-            catch (Exception ex)
-            {
-                // T23 non-retryable error telemetry — dedicated branch for APP_NOT_OWNED / PLAY_STORE_NOT_FOUND.
-                var code = ClassifyExceptionErrorCode(ex);
-                var retryable = AppUpdateError.IsRetryable(code);
-                var err = new AppUpdateError(code, ex.Message, retryable, DateTime.UtcNow);
-                _lastError = err;
-                SafeInvokeAnalytics(a => a.OnError(err));
-                OnError?.Invoke(err);
-                throw;
+                info = await FetchInfoWithWatchdog(watchdogCts, ct, resolved, watchdogMs);
             }
 
             _lastUpdateInfo = info;
+            var telemetryCtx = BuildTelemetryContext("auto_check", info);
             SafeInvokeAnalytics(a => a.OnUpdateInfoReceived(info));
+            SafeInvokeV2(v2 => v2.OnUpdateInfoReceived(info, telemetryCtx));
             OnUpdateInfoReceived?.Invoke(info);
+
+            // Wave 2 — per-version cooldown (Task 35).
+            if (info.IsUpdateAvailable && IsVersionInCooldown(info.AvailableVersionCode, info.UpdatePriority))
+            {
+                BizSimLogger.Info($"Per-version cooldown active for version {info.AvailableVersionCode} — skipping prompt.");
+                SafeInvokeV2(v2 => v2.OnPerVersionCooldownBlocked(telemetryCtx));
+                return info;
+            }
 
             // T19 policy engine integration — evaluate and act.
             var policyContext = BuildPolicyContext(info);
             var decision = _policyEngine.Evaluate(policyContext);
             BizSimLogger.Verbose($"Policy decision: {decision}");
+            SafeInvokeV2(v2 => v2.OnPolicyEvaluated(decision, telemetryCtx));
 
             if (_settings != null && _settings.DryRunMode && Debug.isDebugBuild)
             {
@@ -304,11 +448,15 @@ namespace BizSim.Google.Play.AppUpdate
             if (decision.IsBlock)
             {
                 BizSimLogger.Info($"Policy blocked update: {decision.Reason}");
+                FireV2BlockedEvent(decision, telemetryCtx);
                 return info;
             }
 
             if (decision.IsAllow)
             {
+                // Record that we prompted for this version (cooldown starts now).
+                RecordCooldownForVersion(info.AvailableVersionCode);
+
                 if (decision.UpdateType == AppUpdateType.Immediate)
                 {
                     BizSimLogger.Info("Policy allows immediate update — starting immediate flow.");
@@ -330,7 +478,9 @@ namespace BizSim.Google.Play.AppUpdate
             EnsureMainThread();
             if (_flexibleInFlight) throw new InvalidOperationException("Flexible update already in progress");
             _flexibleInFlight = true;
+            var telemetryCtx = BuildTelemetryContext("flexible_start");
             SafeInvokeAnalytics(a => a.OnFlexibleFlowStarted());
+            SafeInvokeV2(v2 => v2.OnFlexibleFlowStarted(telemetryCtx));
             try
             {
                 var resolved = ResolveTimeout(timeoutSeconds);
@@ -353,6 +503,7 @@ namespace BizSim.Google.Play.AppUpdate
                         true, DateTime.UtcNow);
                     _lastError = timeout;
                     SafeInvokeAnalytics(a => a.OnError(timeout));
+                    SafeInvokeV2(v2 => v2.OnError(timeout, telemetryCtx));
                     OnError?.Invoke(timeout);
                     return timeout;
                 }
@@ -361,6 +512,7 @@ namespace BizSim.Google.Play.AppUpdate
                 {
                     _lastError = err.Value;
                     SafeInvokeAnalytics(a => a.OnError(err.Value));
+                    SafeInvokeV2(v2 => v2.OnError(err.Value, telemetryCtx));
                     OnError?.Invoke(err.Value);
                 }
                 return err;
@@ -379,7 +531,9 @@ namespace BizSim.Google.Play.AppUpdate
             EnsureMainThread();
             if (_immediateInFlight) throw new InvalidOperationException("Immediate update already in progress");
             _immediateInFlight = true;
+            var telemetryCtx = BuildTelemetryContext("immediate_start");
             SafeInvokeAnalytics(a => a.OnImmediateFlowStarted());
+            SafeInvokeV2(v2 => v2.OnImmediateFlowStarted(telemetryCtx));
             try
             {
                 var resolved = ResolveTimeout(timeoutSeconds);
@@ -388,6 +542,7 @@ namespace BizSim.Google.Play.AppUpdate
                 {
                     _lastError = err.Value;
                     SafeInvokeAnalytics(a => a.OnError(err.Value));
+                    SafeInvokeV2(v2 => v2.OnError(err.Value, telemetryCtx));
                     OnError?.Invoke(err.Value);
                 }
                 return err;
@@ -410,7 +565,11 @@ namespace BizSim.Google.Play.AppUpdate
                     $"Current: {(last?.InstallStatus.ToString() ?? "null")}. " +
                     $"Subscribe to OnInstallStateChanged or ReadInstallStatesAsync to observe the Downloaded state first.");
             }
+            var telemetryCtx = BuildTelemetryContext("complete_update");
             SafeInvokeAnalytics(a => a.OnCompleteUpdateInvoked());
+            SafeInvokeV2(v2 => v2.OnCompleteUpdateInvoked(telemetryCtx));
+
+            CancelRemindLater();
 
             // T20 watchdog — wraps CompleteFlexibleUpdateAsync.
             int watchdogMs = (_settings != null ? _settings.WatchdogTimeoutSeconds : 15) * 1000;
@@ -429,10 +588,115 @@ namespace BizSim.Google.Play.AppUpdate
                     true, DateTime.UtcNow);
                 _lastError = err;
                 SafeInvokeAnalytics(a => a.OnError(err));
+                SafeInvokeV2(v2 => v2.OnError(err, telemetryCtx));
                 OnError?.Invoke(err);
                 throw;
             }
         }
+
+        // ---------------------------------------------------------------
+        // Wave 2 — Remind-later with 24h hard cap (Task 37)
+        // ---------------------------------------------------------------
+
+        /// <summary>
+        /// Defers <see cref="CompleteFlexibleUpdateAsync"/> by <paramref name="delay"/>, capped at
+        /// <see cref="AppUpdateSettings.PostDownloadRemindLaterMaxHours"/> (default 24h). When the
+        /// cap expires, the update auto-completes. Only callable when the last observed install
+        /// state is <see cref="InstallStatus.Downloaded"/>.
+        /// </summary>
+        /// <param name="delay">How long to wait before auto-completing. Capped at the Settings max.</param>
+        /// <param name="ct">Cancellation token that cancels the remind-later timer (does NOT auto-complete).</param>
+        public async Task CompleteFlexibleUpdateAsync(TimeSpan delay, CancellationToken ct = default)
+        {
+            EnsureMainThread();
+
+            var last = LastObservedState;
+            if (last == null || last.Value.InstallStatus != InstallStatus.Downloaded)
+            {
+                throw new InvalidOperationException(
+                    $"CompleteFlexibleUpdateAsync(delay) requires install state == Downloaded. " +
+                    $"Current: {(last?.InstallStatus.ToString() ?? "null")}.");
+            }
+
+            int maxHours = _settings != null
+                ? _settings.PostDownloadRemindLaterMaxHours
+                : AppUpdateSettings.DefaultPostDownloadRemindLaterMaxHours;
+
+            // If maxHours is 0, auto-complete is disabled — just complete immediately.
+            if (maxHours <= 0)
+            {
+                BizSimLogger.Info("Remind-later: max hours is 0, completing immediately.");
+                await CompleteFlexibleUpdateAsync(ct);
+                return;
+            }
+
+            var maxDelay = TimeSpan.FromHours(maxHours);
+            var effectiveDelay = delay > maxDelay ? maxDelay : delay;
+            if (effectiveDelay <= TimeSpan.Zero)
+            {
+                BizSimLogger.Info("Remind-later: delay is zero or negative, completing immediately.");
+                await CompleteFlexibleUpdateAsync(ct);
+                return;
+            }
+
+            var telemetryCtx = BuildTelemetryContext("remind_later");
+            SafeInvokeV2(v2 => v2.OnRemindLaterStarted(telemetryCtx));
+            BizSimLogger.Info($"Remind-later: will auto-complete in {effectiveDelay.TotalMinutes:F0} min (cap: {maxHours}h).");
+
+            CancelRemindLater();
+            _remindLaterCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+
+            // Fire-and-forget the auto-complete timer.
+            RemindLaterAutoCompleteAsync(effectiveDelay, _remindLaterCts.Token);
+        }
+
+        private async Task RemindLaterAutoCompleteAsync(TimeSpan delay, CancellationToken ct)
+        {
+            try
+            {
+                await Task.Delay(delay, ct);
+            }
+            catch (OperationCanceledException)
+            {
+                BizSimLogger.Verbose("Remind-later timer cancelled.");
+                return;
+            }
+
+            // Timer expired — auto-complete if still Downloaded.
+            try
+            {
+                var last = LastObservedState;
+                if (last != null && last.Value.InstallStatus == InstallStatus.Downloaded)
+                {
+                    BizSimLogger.Info("Remind-later cap expired — auto-completing flexible update.");
+                    var ctx = BuildTelemetryContext("remind_later_auto");
+                    SafeInvokeV2(v2 => v2.OnRemindLaterAutoCompleted(ctx));
+                    await _flexible.CompleteAsync(CancellationToken.None);
+                }
+                else
+                {
+                    BizSimLogger.Verbose("Remind-later timer expired but install state is no longer Downloaded — skipping auto-complete.");
+                }
+            }
+            catch (Exception ex)
+            {
+                BizSimLogger.Warning($"Remind-later auto-complete failed: {ex.Message}");
+            }
+        }
+
+        private void CancelRemindLater()
+        {
+            if (_remindLaterCts != null)
+            {
+                _remindLaterCts.Cancel();
+                _remindLaterCts.Dispose();
+                _remindLaterCts = null;
+            }
+        }
+
+        // ---------------------------------------------------------------
+        // Existing public API
+        // ---------------------------------------------------------------
 
         public IAsyncEnumerable<InstallState> ReadInstallStatesAsync(CancellationToken ct = default)
         {
@@ -446,16 +710,58 @@ namespace BizSim.Google.Play.AppUpdate
             _analytics = adapter;
         }
 
+        // ---------------------------------------------------------------
+        // Private helpers
+        // ---------------------------------------------------------------
+
         private float ResolveTimeout(float caller)
             => caller > 0f
                 ? caller
                 : (_settings != null ? _settings.DefaultTimeoutSeconds : AppUpdateSettings.DefaultTimeoutSecondsFallback);
 
+        private async Task<AppUpdateInfo> FetchInfoWithWatchdog(
+            CancellationTokenSource watchdogCts, CancellationToken callerCt,
+            float resolved, int watchdogMs)
+        {
+            try
+            {
+                return await _infoProvider.GetAppUpdateInfoAsync(watchdogCts.Token, resolved);
+            }
+            catch (OperationCanceledException) when (!callerCt.IsCancellationRequested)
+            {
+                var err = new AppUpdateError(
+                    InstallErrorCode.Timeout,
+                    $"CheckForUpdateAsync watchdog timeout ({watchdogMs}ms)",
+                    true, DateTime.UtcNow);
+                _lastError = err;
+                SafeInvokeAnalytics(a => a.OnError(err));
+                OnError?.Invoke(err);
+                throw;
+            }
+            catch (Exception ex)
+            {
+                // T23 non-retryable error telemetry — dedicated branch for APP_NOT_OWNED / PLAY_STORE_NOT_FOUND.
+                var code = ClassifyExceptionErrorCode(ex);
+                var retryable = AppUpdateError.IsRetryable(code);
+                var err = new AppUpdateError(code, ex.Message, retryable, DateTime.UtcNow);
+                _lastError = err;
+                var ctx = BuildTelemetryContext("check_error");
+                SafeInvokeAnalytics(a => a.OnError(err));
+                SafeInvokeV2(v2 => v2.OnError(err, ctx));
+                if (!retryable)
+                    SafeInvokeV2(v2 => v2.OnNonRetryableError(err, ctx));
+                OnError?.Invoke(err);
+                throw;
+            }
+        }
+
         private void HandleState(InstallState s)
         {
             lock (_stateLock) { _lastState = s; }
             _installStateStream.Enqueue(s);
+            var ctx = BuildTelemetryContext("state_change");
             SafeInvokeAnalytics(a => a.OnInstallStateChanged(s));
+            SafeInvokeV2(v2 => v2.OnInstallStateChanged(s, ctx));
             OnInstallStateChanged?.Invoke(s);
         }
 
@@ -463,12 +769,42 @@ namespace BizSim.Google.Play.AppUpdate
         /// T18 CRITICAL — DeveloperTriggeredUpdateInProgress resume re-check. When the app comes
         /// back from a paused state (user switched away during immediate update), re-fetch
         /// AppUpdateInfo and auto-resume the immediate flow if stalled.
+        /// Also invalidates the preload cache on resume (Wave 2).
         /// </summary>
         private void OnApplicationPause(bool paused)
         {
-            if (paused) return;
-            // Fire-and-forget — CS4014 suppressed at top of file.
+            if (paused)
+            {
+                // Auto-complete on pause if remind-later is active and Downloaded.
+                var last = LastObservedState;
+                if (_remindLaterCts != null && last != null
+                    && last.Value.InstallStatus == InstallStatus.Downloaded)
+                {
+                    BizSimLogger.Info("App paused with remind-later active and Downloaded — auto-completing.");
+                    CancelRemindLater();
+                    // Fire-and-forget auto-complete.
+                    AutoCompleteOnPause();
+                }
+                return;
+            }
+
+            // Resume: invalidate preload cache + check for stalled immediate.
+            InvalidatePreloadCache();
             CheckStalledImmediateUpdateAsync();
+        }
+
+        private async void AutoCompleteOnPause()
+        {
+            try
+            {
+                var ctx = BuildTelemetryContext("remind_later_pause");
+                SafeInvokeV2(v2 => v2.OnRemindLaterAutoCompleted(ctx));
+                await _flexible.CompleteAsync(CancellationToken.None);
+            }
+            catch (Exception ex)
+            {
+                BizSimLogger.Warning($"Auto-complete on pause failed: {ex.Message}");
+            }
         }
 
         private async Task CheckStalledImmediateUpdateAsync()
@@ -497,6 +833,45 @@ namespace BizSim.Google.Play.AppUpdate
             catch (Exception ex) { BizSimLogger.Warning($"analytics adapter threw: {ex.Message}"); }
         }
 
+        /// <summary>
+        /// Wave 2 — V2 adapter pattern: <c>if (_analytics is IAppUpdateAnalyticsAdapterV2 v2)</c>
+        /// wrapped in try/catch per bridge pattern §6.
+        /// </summary>
+        private void SafeInvokeV2(Action<IAppUpdateAnalyticsAdapterV2> call)
+        {
+            var a = _analytics;
+            if (a is IAppUpdateAnalyticsAdapterV2 v2)
+            {
+                try { call(v2); }
+                catch (Exception ex) { BizSimLogger.Warning($"V2 analytics adapter threw: {ex.Message}"); }
+            }
+        }
+
+        /// <summary>
+        /// Fires the appropriate V2 blocked event based on the policy decision reason.
+        /// </summary>
+        private void FireV2BlockedEvent(PolicyDecision decision, AppUpdateTelemetryContext ctx)
+        {
+            switch (decision.Reason)
+            {
+                case "killswitch_disabled":
+                    SafeInvokeV2(v2 => v2.OnKillSwitchBlocked(ctx));
+                    break;
+                case "consent_denied":
+                    SafeInvokeV2(v2 => v2.OnConsentBlocked(ctx));
+                    break;
+                case "offline":
+                    SafeInvokeV2(v2 => v2.OnOfflineBlocked(ctx));
+                    break;
+                case "first_run_grace":
+                    SafeInvokeV2(v2 => v2.OnFirstRunGraceBlocked(ctx));
+                    break;
+                default:
+                    // Other block reasons don't have dedicated V2 events.
+                    break;
+            }
+        }
+
         private void RebuildPolicyEngine()
         {
             _policyEngine = new AppUpdatePolicyEngine(
@@ -516,6 +891,22 @@ namespace BizSim.Google.Play.AppUpdate
                 daysSinceInstall: _sessionTracker?.DaysSinceInstall ?? 0,
                 lastUpdateInfo: info,
                 appVersion: Application.version);
+        }
+
+        /// <summary>
+        /// Build a telemetry context from current state. Used at every V2 event emission.
+        /// </summary>
+        private AppUpdateTelemetryContext BuildTelemetryContext(string triggerReason, AppUpdateInfo? info = null)
+        {
+            var updateInfo = info ?? _lastUpdateInfo;
+            return new AppUpdateTelemetryContext(
+                appVersion: Application.version,
+                availableVersionCode: updateInfo?.AvailableVersionCode ?? 0,
+                updatePriority: updateInfo?.UpdatePriority ?? 0,
+                stalenessDays: updateInfo?.ClientVersionStalenessDays ?? -1,
+                triggerReason: triggerReason,
+                sessionCount: _sessionTracker?.SessionCount ?? 0,
+                variantId: null);
         }
 
         /// <summary>
@@ -556,6 +947,7 @@ namespace BizSim.Google.Play.AppUpdate
         {
             if (_stateListener != null) _stateListener.OnStateUpdate -= HandleState;
             _watchdogCts?.Dispose();
+            CancelRemindLater();
             if (_instance == this) _instance = null;
         }
 

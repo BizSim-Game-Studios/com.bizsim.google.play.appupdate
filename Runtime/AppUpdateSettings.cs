@@ -79,5 +79,29 @@ namespace BizSim.Google.Play.AppUpdate
 
         [Tooltip("Log full policy decision tree without invoking provider (dev builds only)")]
         public bool DryRunMode;
+
+        [Header("Preload (Wave 2)")]
+        [Tooltip("TTL for the cached AppUpdateInfo from PreloadAppUpdateInfoAsync, in minutes.")]
+        [Range(1, 60)]
+        public int PreloadCacheTtlMinutes = DefaultPreloadCacheTtlMinutes;
+
+        [Header("Per-Version Cooldown (Wave 2)")]
+        [Tooltip("Days to suppress re-prompt for a given version code after the user has seen the prompt. Priority-5 updates are exempt.")]
+        [Range(0, 30)]
+        public int PerVersionCooldownDays = DefaultPerVersionCooldownDays;
+
+        [Header("Post-Download Remind Later (Wave 2)")]
+        [Tooltip("Maximum hours a flexible update can stay in Downloaded state before auto-completing. 0 disables auto-complete.")]
+        [Range(0, 168)]
+        public int PostDownloadRemindLaterMaxHours = DefaultPostDownloadRemindLaterMaxHours;
+
+        [Header("Install Source (Wave 2)")]
+        [Tooltip("Skip update prompts on sideloaded / non-Play-Store installs. Prevents confusing UX on development builds or alternative stores.")]
+        public bool SkipNonPlayInstalls = true;
+
+        // Wave 2 fallback defaults.
+        public const int DefaultPreloadCacheTtlMinutes       = 15;
+        public const int DefaultPerVersionCooldownDays        = 2;
+        public const int DefaultPostDownloadRemindLaterMaxHours = 24;
     }
 }
