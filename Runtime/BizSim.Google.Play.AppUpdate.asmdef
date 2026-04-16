@@ -2,7 +2,7 @@
   "name": "BizSim.Google.Play.AppUpdate",
   "rootNamespace": "BizSim.Google.Play.AppUpdate",
   "references": [],
-  "includePlatforms": ["Android", "Editor"],
+  "includePlatforms": [],
   "excludePlatforms": [],
   "allowUnsafeCode": false,
   "overrideReferences": false,
