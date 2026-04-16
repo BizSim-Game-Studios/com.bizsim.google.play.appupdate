@@ -14,8 +14,9 @@
   "keywords": ["google-play", "in-app-updates", "app-update", "flexible-update", "immediate-update", "android"],
   "repository": { "type": "git", "url": "https://github.com/BizSim-Game-Studios/com.bizsim.google.play.appupdate.git" },
   "samples": [
-    { "displayName": "Basic Integration", "description": "Flexible and immediate flow demos plus a smart policy sample that picks between them by update priority.", "path": "Samples~/BasicIntegration" },
-    { "displayName": "Mock Config Presets", "description": "Pre-configured mock scenarios covering both flows and resume-in-progress.", "path": "Samples~/MockPresets" }
+    { "displayName": "Basic Integration", "description": "Full bootstrap with policy engine, preload, flexible/immediate flows, remind-later, and download progress adapter.", "path": "Samples~/BasicIntegration" },
+    { "displayName": "Mock Config Presets", "description": "Pre-configured mock scenarios covering both flows and resume-in-progress.", "path": "Samples~/MockPresets" },
+    { "displayName": "Firebase Analytics Adapter", "description": "Reference IAppUpdateAnalyticsAdapterV2 implementation logging all 25 events to Firebase Analytics.", "path": "Samples~/FirebaseAdapter" }
   ],
   "dependencies": {
     "com.google.external-dependency-manager": "1.2.187"
