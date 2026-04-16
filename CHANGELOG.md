@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-04-16
+
+### Added
+- Smart update policy engine consuming priority, staleness, session count, and versionCode via swappable `IAppUpdatePolicyEngine`
+- `RecordLaunch()` + first-run grace period (3 sessions / 7 days default)
+- `IAppUpdateConfigSource` interface with top-level `RemoteEnabled` kill switch
+- `IConsentGate` interface for GDPR / DMA / COPPA region shipments
+- `AppUpdateController.GetDiagnosticSnapshot()` for support bundles
+- `AppUpdateSessionTracker` with PlayerPrefs-backed session/launch counting
+- `DeveloperTriggeredUpdateInProgress` automatic resume on `OnApplicationPause(false)` — fixes stalled immediate updates
+- Offline guard, in-flight watchdog (15s default, immediate flow exempt), editor dry-run mode
+- `ErrorAppNotOwned` + `ErrorPlayStoreNotFound` dedicated non-retryable telemetry branch
+- Editor Configuration tabs: Policy Engine, Remote Config, Consent Gate, Diagnostics
+- Build validator warnings for watchdog/timeout mismatch and dry-run in release builds
+- Development-build warnings when kill switch or consent gate not wired (S4 security)
+- `AppUpdateData_HasNoUserAcceptedField` regression test
+
 ## [1.0.1] - 2026-04-15
 
 ### Fixed
