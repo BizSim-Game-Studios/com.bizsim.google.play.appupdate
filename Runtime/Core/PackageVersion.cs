@@ -2,8 +2,16 @@ namespace BizSim.Google.Play.AppUpdate
 {
     internal static class PackageVersion
     {
-        public const string Current         = "1.3.0";
-        public const string ReleaseDate     = "2026-04-16";
-        public const string PlayCoreVersion = "2.1.0";
+        public const string Current         = "1.4.0";
+        public const string ReleaseDate     = "2026-04-17";
+
+        // === Canonical K8 fields (Plan G) ===
+        public const string NativeSdkVersion       = "2.1.0";
+        public const string NativeSdkLabel         = "Play Core (app-update)";
+        public const string NativeSdkArtifactCoord = "com.google.android.play:app-update:2.1.0";
+
+        // === Legacy alias (deprecated; removed in 2.0.0 per ADR-009) ===
+        [System.Obsolete("Use NativeSdkVersion. Removed in 2.0.0 per ADR-009.", error: false)]
+        public const string PlayCoreVersion = NativeSdkVersion;
     }
 }
