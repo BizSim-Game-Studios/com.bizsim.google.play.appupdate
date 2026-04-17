@@ -2,7 +2,7 @@
   "name": "com.bizsim.google.play.appupdate",
   "displayName": "BizSim Google Play In-App Updates",
   "description": "Unity package for Google Play In-App Updates API (v2.1.0). Dual-flow model (flexible + immediate) with smart policy engine, remote kill switch, per-version cooldown, install-source detection, and stalled-update auto-resume.",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "unity": "6000.0",
   "changelogUrl": "https://github.com/BizSim-Game-Studios/com.bizsim.google.play.appupdate/blob/main/CHANGELOG.md",
   "documentationUrl": "https://github.com/BizSim-Game-Studios/com.bizsim.google.play.appupdate/blob/main/README.md",
