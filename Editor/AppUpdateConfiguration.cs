@@ -1,3 +1,4 @@
+using System.Reflection;
 using UnityEditor;
 using UnityEngine;
 using BizSim.Google.Play.Editor.Core;
@@ -33,6 +34,15 @@ namespace BizSim.Google.Play.AppUpdate.Editor
 
         private void OnGUI()
         {
+            if (_settingsSO == null) OnEnable();
+            if (_settingsSO == null) return;
+
+            // Standard Unity SerializedObject pattern: single Update() at frame start,
+            // single ApplyModifiedProperties() at frame end. Calling Update() per-section
+            // mid-GUI would discard the user's checkbox/slider edits before they propagate
+            // to the SerializedObject's backing asset, breaking interactivity entirely.
+            _settingsSO.Update();
+
             _scroll = EditorGUILayout.BeginScrollView(_scroll);
             DrawHeader();
             EditorGUILayout.Space(8);
@@ -52,13 +62,27 @@ namespace BizSim.Google.Play.AppUpdate.Editor
             EditorGUILayout.Space(8);
             DrawLinksSection();
             EditorGUILayout.EndScrollView();
+
+            // Persist in-memory edits to the asset clone after every frame. Disk save only
+            // happens on Apply; until then, edits are kept alive in the SerializedObject's
+            // target (the loaded ScriptableObject instance), and Revert can re-read from disk.
+            _settingsSO.ApplyModifiedProperties();
+        }
+
+        private static string ResolveNativeSdkVersion()
+        {
+            const BindingFlags F = BindingFlags.Public | BindingFlags.Static;
+            var t = typeof(PackageVersion);
+            var f = t.GetField("NativeSdkVersion", F)
+                 ?? t.GetField("PlayCoreVersion", F);
+            return f?.GetRawConstantValue() as string ?? "unknown";
         }
 
         private void DrawHeader()
         {
             EditorGUILayout.LabelField("BizSim Google Play In-App Updates", EditorStyles.boldLabel);
             EditorGUILayout.LabelField($"Package version: {PackageVersion.Current}");
-            EditorGUILayout.LabelField($"Play Core: {PackageVersion.PlayCoreVersion}");
+            EditorGUILayout.LabelField($"Play Core: {ResolveNativeSdkVersion()}");
             // Hardcoded literal — kept in sync with AAR pin by the workspace `version-drift-check.sh`
             // hook when fragment version is bumped via the google-play-appupdate-bridge skill.
             EditorGUILayout.LabelField("androidx.fragment: 1.8.9 (resolved at build time by EDM4U)");
@@ -95,9 +119,7 @@ namespace BizSim.Google.Play.AppUpdate.Editor
                 "AppUpdateController still override these for a specific scene.",
                 MessageType.Info);
 
-            if (_settingsSO == null) OnEnable();
-            _settingsSO.Update();
-
+            // _settingsSO already Update()'d once at the top of OnGUI — do NOT call again here.
             EditorGUILayout.PropertyField(_settingsSO.FindProperty("LogsEnabled"));
             EditorGUILayout.PropertyField(_settingsSO.FindProperty("LogLevel"));
             EditorGUILayout.PropertyField(_settingsSO.FindProperty("UseMockInDevelopmentBuild"));
@@ -111,13 +133,18 @@ namespace BizSim.Google.Play.AppUpdate.Editor
             {
                 if (GUILayout.Button("Apply"))
                 {
-                    _settingsSO.ApplyModifiedProperties();
+                    // Flush pending edits, then write the asset to disk.
+                    _settingsSO.ApplyModifiedPropertiesWithoutUndo();
                     AppUpdateSettingsAsset.Save();
                     BizSimLogger.InvalidateCache();
+                    _settingsSO.Update();
                 }
                 if (GUILayout.Button("Revert"))
                 {
-                    _settingsSO.Update();
+                    // Discard unsaved in-memory edits by reloading from disk. ApplyModifiedProperties()
+                    // runs every frame (mutating the live asset), so Update() alone cannot undo edits —
+                    // rebuild the SerializedObject over the disk-loaded asset, mirroring Reset. (§8)
+                    _settingsSO = new SerializedObject(AppUpdateSettingsAsset.LoadOrCreate());
                 }
                 if (GUILayout.Button("Reset to defaults"))
                 {
@@ -139,9 +166,7 @@ namespace BizSim.Google.Play.AppUpdate.Editor
                 "days since install, update priority, and consent before deciding Flexible vs Immediate flow.",
                 MessageType.Info);
 
-            if (_settingsSO == null) OnEnable();
-            _settingsSO.Update();
-
+            // _settingsSO already Update()'d once at the top of OnGUI — do NOT call again here.
             EditorGUILayout.PropertyField(_settingsSO.FindProperty("ImmediatePriorityFloor"),
                 new GUIContent("Immediate Priority Floor", "Priority >= this triggers immediate update (0-5)."));
             EditorGUILayout.PropertyField(_settingsSO.FindProperty("FirstRunGraceSessions"),
@@ -160,12 +185,14 @@ namespace BizSim.Google.Play.AppUpdate.Editor
             {
                 if (GUILayout.Button("Apply Policy Settings"))
                 {
-                    _settingsSO.ApplyModifiedProperties();
+                    _settingsSO.ApplyModifiedPropertiesWithoutUndo();
                     AppUpdateSettingsAsset.Save();
+                    _settingsSO.Update();
                 }
                 if (GUILayout.Button("Revert"))
                 {
-                    _settingsSO.Update();
+                    // Reload from disk to discard unsaved edits (see Logging-section Revert).
+                    _settingsSO = new SerializedObject(AppUpdateSettingsAsset.LoadOrCreate());
                 }
             }
             EditorGUI.indentLevel--;

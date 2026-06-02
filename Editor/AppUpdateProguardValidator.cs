@@ -1,14 +1,22 @@
 using System.Collections.Generic;
 using System.IO;
+using UnityEditor.PackageManager;
 using UnityEngine;
 
 namespace BizSim.Google.Play.AppUpdate.Editor
 {
     /// <summary>
-    /// Validates that the consumer's ProGuard/R8 configuration contains the required keep rules for
-    /// this package's JNI bridge classes. Scans <c>.pro</c> files under
-    /// <c>Assets/Plugins/Android/</c> for the critical keep-rule patterns. Missing rules cause
-    /// build-time warnings (advisory only — never fails the build).
+    /// Validates that the JNI-bridge keep rules required by this package are reachable to
+    /// Gradle/R8 at Android build time. Scans <c>.pro</c> files in two locations:
+    /// <list type="number">
+    ///   <item>The package's own <c>Runtime/Plugins/Android/BizSimAppUpdate.androidlib</c>
+    ///         (primary — Unity includes this as a Gradle subproject automatically; the
+    ///         <c>consumer-rules.pro</c> declared in <c>build.gradle</c> propagates to the
+    ///         host app).</item>
+    ///   <item>The consumer's <c>Assets/Plugins/Android/</c> tree (secondary — detects user
+    ///         overrides or supplemental rules).</item>
+    /// </list>
+    /// Missing rules cause build-time warnings (advisory only — never fails the build).
     /// </summary>
     internal static class AppUpdateProguardValidator
     {
@@ -38,31 +46,46 @@ namespace BizSim.Google.Play.AppUpdate.Editor
         };
 
         /// <summary>
-        /// Validates that the consumer project's ProGuard configuration keeps the required classes.
-        /// Returns a list of human-readable warning messages (empty if all rules are present).
+        /// Validates that ProGuard configuration reachable to Gradle/R8 keeps the required
+        /// classes. Returns a list of human-readable warning messages (empty if all rules
+        /// are present). Scans the package's own <c>.androidlib</c> first, then the
+        /// consumer's <c>Assets/Plugins/Android</c> tree.
         /// </summary>
-        /// <param name="pluginsAndroidPath">
-        /// Root path to scan for <c>.pro</c> files. Defaults to <c>Assets/Plugins/Android</c>.
+        /// <param name="extraScanPath">
+        /// Optional extra root path to scan for <c>.pro</c> files (used by tests). When null,
+        /// defaults to <c>Assets/Plugins/Android</c> in addition to the package's
+        /// <c>.androidlib</c> path resolved at runtime.
         /// </param>
-        public static List<string> Validate(string pluginsAndroidPath = null)
+        public static List<string> Validate(string extraScanPath = null)
         {
             var warnings = new List<string>();
-            pluginsAndroidPath ??= Path.Combine(Application.dataPath, "Plugins", "Android");
 
-            // Collect all .pro file contents. The .androidlib shipped by this package should
-            // already contain the rules, but consumer projects may override or strip ProGuard
-            // configs. We scan all .pro files to find at least one match per required class.
-            var allProContent = CollectProguardContent(pluginsAndroidPath);
+            // Primary source: the package's shipped .androidlib. Resolved via the Package
+            // Manager so it works whether the package is consumed via Git URL, file: path,
+            // or local embedded copy. Unity bundles every *.androidlib under Packages/**/
+            // Runtime/Plugins/Android/ as a Gradle subproject at Android build time, and the
+            // consumer-rules.pro declared in build.gradle propagates to the host app — no
+            // EDM4U resolution required for the package's own keep rules.
+            var packageProPath = ResolvePackageAndroidLibPath();
+
+            // Secondary source: the consumer's Assets/Plugins/Android tree. Detects user
+            // overrides and supplemental rules.
+            var consumerProPath = extraScanPath ?? Path.Combine(Application.dataPath, "Plugins", "Android");
+
+            var allProContent = CollectProguardContent(packageProPath) +
+                                CollectProguardContent(consumerProPath);
 
             if (string.IsNullOrEmpty(allProContent))
             {
-                // No .pro files at all — the .androidlib ships its own, so this is unexpected
-                // but not necessarily broken (EDM4U may not have resolved yet).
+                // The package's shipped .androidlib is missing AND the consumer has no
+                // ProGuard rules — the package is likely corrupted on disk.
                 warnings.Add(
-                    "No .pro files found under " + pluginsAndroidPath + ". " +
-                    "This is expected if EDM4U has not resolved yet. After running " +
-                    "Android Resolver > Force Resolve, re-check that proguard-rules.pro " +
-                    "exists in BizSimAppUpdate.androidlib.");
+                    "No .pro files found in the package's BizSimAppUpdate.androidlib " +
+                    $"(expected at '{packageProPath ?? "<unresolved>"}') nor under " +
+                    $"'{consumerProPath}'. The package may be corrupted — reinstall it " +
+                    "via the Package Manager and verify that " +
+                    "Runtime/Plugins/Android/BizSimAppUpdate.androidlib/proguard-rules.pro " +
+                    "is present.");
                 return warnings;
             }
 
@@ -105,18 +128,34 @@ namespace BizSim.Google.Play.AppUpdate.Editor
 
         private static string CollectProguardContent(string rootPath)
         {
-            if (!Directory.Exists(rootPath)) return null;
+            if (string.IsNullOrEmpty(rootPath) || !Directory.Exists(rootPath)) return string.Empty;
 
             var proFiles = Directory.GetFiles(rootPath, "*.pro", SearchOption.AllDirectories);
-            if (proFiles.Length == 0) return null;
+            if (proFiles.Length == 0) return string.Empty;
 
             var sb = new System.Text.StringBuilder();
             foreach (var f in proFiles)
             {
-                try { sb.Append(File.ReadAllText(f)); }
+                try { sb.Append(File.ReadAllText(f)); sb.Append('\n'); }
                 catch { /* skip unreadable files */ }
             }
             return sb.ToString();
+        }
+
+        /// <summary>
+        /// Resolves the on-disk path to this package's shipped <c>.androidlib</c> directory.
+        /// Uses <see cref="PackageInfo.FindForAssembly"/> so the lookup works for Git URL,
+        /// file: path, embedded, and local-tarball install modes. Returns <c>null</c> if the
+        /// package metadata cannot be resolved (e.g. running outside Unity in a test runner).
+        /// </summary>
+        private static string ResolvePackageAndroidLibPath()
+        {
+            var info = PackageInfo.FindForAssembly(typeof(AppUpdateProguardValidator).Assembly);
+            if (info == null || string.IsNullOrEmpty(info.resolvedPath)) return null;
+
+            return Path.Combine(
+                info.resolvedPath,
+                "Runtime", "Plugins", "Android", "BizSimAppUpdate.androidlib");
         }
     }
 }

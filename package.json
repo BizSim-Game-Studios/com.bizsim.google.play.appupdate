@@ -2,7 +2,7 @@
   "name": "com.bizsim.google.play.appupdate",
   "displayName": "BizSim Google Play In-App Updates",
   "description": "Unity package for Google Play In-App Updates (v2.1.0). Production-ready Java-to-C# wrapper supporting flexible and immediate flows with install state streaming, main-thread safety, and a mock provider for editor testing.",
-  "version": "1.4.1",
+  "version": "1.4.2",
   "unity": "6000.0",
   "changelogUrl": "https://github.com/BizSim-Game-Studios/com.bizsim.google.play.appupdate/blob/main/CHANGELOG.md",
   "documentationUrl": "https://github.com/BizSim-Game-Studios/com.bizsim.google.play.appupdate/blob/main/README.md",

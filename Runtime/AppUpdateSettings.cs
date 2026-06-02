@@ -18,7 +18,7 @@ namespace BizSim.Google.Play.AppUpdate
     /// <c>AppUpdateSettings</c> spec in CROSS-INVARIANTS §12 before editing here.
     /// </remarks>
     [CreateAssetMenu(
-        menuName = "BizSim/Google Play/AppUpdate Settings",
+        menuName = "BizSim/Google Play Service/AppUpdate Settings",
         fileName = "AppUpdateSettings",
         order = 0)]
     public sealed class AppUpdateSettings : ScriptableObject
