@@ -37,11 +37,13 @@ namespace BizSim.Google.Play.AppUpdate.Editor
             if (_settingsSO == null) OnEnable();
             if (_settingsSO == null) return;
 
-            // Standard Unity SerializedObject pattern: single Update() at frame start,
-            // single ApplyModifiedProperties() at frame end. Calling Update() per-section
-            // mid-GUI would discard the user's checkbox/slider edits before they propagate
-            // to the SerializedObject's backing asset, breaking interactivity entirely.
-            _settingsSO.Update();
+            // The SerializedObject is built once (in OnEnable) over the disk-loaded asset.
+            // Edits accumulate as PENDING in the SO across frames AND sections. We deliberately
+            // do NOT call Update() here (it would re-read the target each frame and discard
+            // multi-frame pending edits) nor ApplyModifiedProperties() (it would mutate the live
+            // asset every frame, which breaks both Revert buttons — verified in Unity). Pending
+            // edits are flushed to the asset ONLY by Apply; Revert rebuilds the SO over the
+            // un-mutated asset to discard them.
 
             _scroll = EditorGUILayout.BeginScrollView(_scroll);
             DrawHeader();
@@ -62,11 +64,6 @@ namespace BizSim.Google.Play.AppUpdate.Editor
             EditorGUILayout.Space(8);
             DrawLinksSection();
             EditorGUILayout.EndScrollView();
-
-            // Persist in-memory edits to the asset clone after every frame. Disk save only
-            // happens on Apply; until then, edits are kept alive in the SerializedObject's
-            // target (the loaded ScriptableObject instance), and Revert can re-read from disk.
-            _settingsSO.ApplyModifiedProperties();
         }
 
         private static string ResolveNativeSdkVersion()

@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.3] - 2026-06-03
+
+### Fixed
+- **Settings-panel Revert buttons (completes the incomplete v1.4.2 fix).** v1.4.2 rebuilt the `SerializedObject` from disk on both Revert buttons, but `OnGUI` still called `ApplyModifiedProperties()` every frame — mutating the live asset before Revert ran. Removed the per-frame `Update()` / `ApplyModifiedProperties()` from `OnGUI`; edits now stay pending and are flushed only by Apply, so both Revert buttons (Logging + Policy Engine) genuinely discard unsaved edits. Verified in Unity (junkyard-tycoon): recompile clean.
+
 ## [1.4.2] - 2026-06-03
 
 ### Fixed
