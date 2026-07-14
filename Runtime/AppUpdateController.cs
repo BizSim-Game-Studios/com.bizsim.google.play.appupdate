@@ -120,7 +120,7 @@ namespace BizSim.Google.Play.AppUpdate
 
             _stateListener.OnStateUpdate += HandleState;
             if (autoStartListener)
-                _stateListener.StartListening();
+                StartCoroutine(StartInstallStateListenerWithRetry());
 
             // Wave 1 defaults — consumers override via SetPolicyEngine/SetConfigSource/SetConsentGate.
             _configSource = new StaticAppUpdateConfigSource();
@@ -143,6 +143,28 @@ namespace BizSim.Google.Play.AppUpdate
                     BizSimLogger.Warning("No custom IConsentGate set — prompts fire without consent. " +
                         "For GDPR/DMA, call SetConsentGate().");
             }
+        }
+
+        // Defense-in-depth for the cold-start activity-recreation race: the install-state
+        // listener needs the Java AppUpdateBridge, whose init can transiently fail when the
+        // Activity is mid-recreation at Awake. GetBridge() is retryable, so poll briefly until
+        // it is ready instead of giving up permanently on the first attempt.
+        private System.Collections.IEnumerator StartInstallStateListenerWithRetry()
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            if (_infoProvider is AndroidAppUpdateInfoProvider)
+            {
+                const int maxAttempts = 5;
+                for (int attempt = 1; attempt <= maxAttempts; attempt++)
+                {
+                    if (AndroidAppUpdateInfoProvider.GetBridge() != null)
+                        break;
+                    yield return new WaitForSeconds(1f);
+                }
+            }
+#endif
+            _stateListener.StartListening();
+            yield break;
         }
 
         /// <summary>

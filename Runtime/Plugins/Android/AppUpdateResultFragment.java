@@ -25,14 +25,17 @@ public final class AppUpdateResultFragment extends Fragment {
         if (existing != null) return existing;
 
         AppUpdateResultFragment fragment = new AppUpdateResultFragment();
+        // Async commit (not commitNow): commitNow runs synchronously and throws
+        // IllegalStateException when the FragmentManager is mid-transition during activity
+        // recreation on cold start. commitAllowingStateLoss enqueues the add and runs it once
+        // the manager is ready, dodging that race. Keep it NON-FATAL: this fragment only routes
+        // the update-flow result — the info check, install-state listener and completeUpdate
+        // paths do not need it, so bridge init must still succeed if the attach can't happen.
         try {
-            fm.beginTransaction().add(fragment, TAG).commitNowAllowingStateLoss();
+            fm.beginTransaction().add(fragment, TAG).commitAllowingStateLoss();
         } catch (IllegalStateException ise) {
-            android.util.Log.e("BizSimAppUpdate",
-                "Fragment attach failed (manager saved-state race): " + ise.getMessage());
-            throw new IllegalStateException(
-                "AppUpdateResultFragment attach failed. Fragment manager rejected the transaction " +
-                "(usually an activity-recreation race). Retry after the activity is fully resumed.", ise);
+            android.util.Log.w("BizSimAppUpdate",
+                "AppUpdateResultFragment attach skipped (FragmentManager unavailable): " + ise.getMessage());
         }
         return fragment;
     }
