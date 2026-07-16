@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.4] - 2026-07-16
+
+### Fixed
+- Correct the Data Safety disclosure: `DATA_SAFETY.md` and `README` claimed the package persists no local state, but it writes local, non-identifying policy counters via `PlayerPrefs` (session/launch counts, install date, per-version prompt cooldown) used by the update-prompt policy engine. Documented accurately; no runtime change.
+- Remove a stray duplicate Keep-a-Changelog preamble embedded mid-history in `CHANGELOG.md`.
+
 ## [1.4.3] - 2026-06-03
 
 ### Fixed
