@@ -27,13 +27,20 @@ Consumers who enable Firebase must complete their own Play Console Data Safety f
 
 ## Data persisted locally
 
-**NONE.** Unlike the sibling `com.bizsim.google.play.review` package (which stores a single `LastPromptTicks` timestamp for its 90-day cooldown), the AppUpdate package does not persist any state. `AppUpdateInfo` is fetched fresh on every `CheckForUpdateAsync()` call; install state is observed via live listener events and never cached. There are no `PlayerPrefs` keys, no files under `Application.persistentDataPath`, and no `EncryptedPlayerPrefs` entries owned by this package.
+The package persists a small amount of **local, non-identifying policy state** via Unity `PlayerPrefs` (device-local; never transmitted). This drives the update-prompt policy engine — a first-run grace period plus a per-version cooldown — so the package does not prompt the user on every launch:
 
-The Google Play Store app itself maintains its own cache of the download (that is how the flexible download survives an app restart), but that cache lives in the Play Store's own sandboxed storage and is not accessible to this package.
+- `bizsim_appupdate_session_count` (int) — sessions counted, for the first-run grace period.
+- `bizsim_appupdate_launch_count` (int) — launches counted, for the first-run grace period.
+- `bizsim_appupdate_install_date` (string, UTC ticks) — first-run timestamp, for the "days since install" grace check.
+- `<cooldown-prefix><versionCode>` (string, UTC ticks) — the last time an update prompt was shown for a given `versionCode`, for the per-version cooldown.
+
+None of these are user-identifying — they are local counters and timestamps used only to schedule update prompts. Nothing is written under `Application.persistentDataPath`, and there are no `EncryptedPlayerPrefs` entries. `AppUpdateInfo` and `InstallState` are still fetched/observed live and never cached.
+
+The Google Play Store app itself maintains its own cache of the download (that is how a flexible download survives an app restart), but that cache lives in the Play Store's own sandboxed storage and is not accessible to this package.
 
 ## User controls
 
-- **No local state to clear.** Because the package persists nothing, there is no `Clear*ForTesting()` escape hatch — there is nothing to clear. To abort an in-flight flexible download, the user can cancel it from the Play Store notification directly.
+- **Local policy state:** the `PlayerPrefs` keys above are device-local and are removed when the app's data is cleared or the app is uninstalled. `AppUpdateSessionTracker.ClearForTesting()` clears the session/launch/install keys (test-only escape hatch). To abort an in-flight flexible download, the user can cancel it from the Play Store notification directly.
 - **Analytics opt-out:** consumers who want to disable the adapter call `AppUpdateController.Instance.SetAnalyticsAdapter(null)` (or never call `SetAnalyticsAdapter` — the default is no adapter).
 - **Full package opt-out:** removing the package from `Packages/manifest.json` leaves no residual state behind.
 
@@ -45,7 +52,7 @@ When filling out the [Data Safety form](https://support.google.com/googleplay/an
 - **Data types collected by this package:** None.
 - **Data shared with third parties by this package:** None (Google Play Core talks to Google Play directly, not through your app).
 - **Is the data encrypted in transit?** — N/A (this package doesn't transmit data).
-- **Can users request their data be deleted?** — N/A (this package doesn't persist data).
+- **Can users request their data be deleted?** — N/A for user data (this package transmits and collects none). The local policy `PlayerPrefs` counters are device-local and are removed on app data-clear or uninstall.
 
 ## References
 

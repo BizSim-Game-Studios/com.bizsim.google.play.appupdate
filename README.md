@@ -105,7 +105,7 @@ The package exposes both flows but does **not** auto-choose. The consumer picks 
 
 ### Data Collected
 
-This package does **not** collect any user data. Play Core handles all communication with the Play Store directly; this bridge only relays method calls and result codes. Unlike some other Play Core bridges, this package has **no `PlayerPrefs` persistence** — every `CheckForUpdateAsync` call queries the Play Store fresh.
+This package does **not** collect any user data. Play Core handles all communication with the Play Store directly; this bridge only relays method calls and result codes. Every `CheckForUpdateAsync` call queries the Play Store fresh — `AppUpdateInfo` is never cached. The package does persist a small amount of **local, non-identifying policy state** (session/launch counts, install date, and per-version prompt cooldowns) via `PlayerPrefs` to drive its update-prompt policy engine; this data is device-local and never transmitted. See [`Documentation~/DATA_SAFETY.md`](Documentation~/DATA_SAFETY.md) for the full disclosure.
 
 ### Data NOT Collected or Shared
 
