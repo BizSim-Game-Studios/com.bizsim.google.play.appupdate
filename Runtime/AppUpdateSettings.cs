@@ -52,9 +52,15 @@ namespace BizSim.Google.Play.AppUpdate
         [Range(1, 256)]
         public int InstallStateQueueCapacity = DefaultInstallStateQueueCapacity;
 
-        [Tooltip("Default timeout for CheckForUpdateAsync / StartFlexibleUpdateAsync / StartImmediateUpdateAsync when the caller passes -1f (sentinel). Used only as a floor fallback.")]
+        // MUST stay BELOW WatchdogTimeoutSeconds. FetchInfoWithWatchdog hands the provider
+        // both this budget and the watchdog's cancellation token, so the shorter of the two
+        // wins. When the watchdog is shorter it always pre-empts, this value never fires, and
+        // the caller gets a blunt cancellation instead of the provider's own typed timeout.
+        // The shipped defaults were inverted (60 vs 15), which also meant the build validator
+        // warned against the package's own factory configuration.
+        [Tooltip("Default timeout for CheckForUpdateAsync / StartFlexibleUpdateAsync / StartImmediateUpdateAsync when the caller passes -1f (sentinel). Must be lower than WatchdogTimeoutSeconds.")]
         [Range(1f, 600f)]
-        public float DefaultTimeoutSeconds = DefaultTimeoutSecondsFallback;
+        public float DefaultTimeoutSeconds = 12f;
 
         [Tooltip("If true, Awake auto-starts the install state listener. Set to false to start it manually via StartInstallStateListener.")]
         public bool AutoStartInstallStateListener = true;
