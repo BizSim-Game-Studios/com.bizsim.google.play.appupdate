@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using UnityEngine;
@@ -952,6 +953,8 @@ namespace BizSim.Google.Play.AppUpdate
                 variantId: null);
         }
 
+        private static readonly Regex NegativeCodePattern = new Regex(@"-\d+", RegexOptions.Compiled);
+
         /// <summary>
         /// T23 — classify exception into error codes. APP_NOT_OWNED and PLAY_STORE_NOT_FOUND are
         /// non-retryable; INTERNAL_ERROR stays retryable.
@@ -959,10 +962,24 @@ namespace BizSim.Google.Play.AppUpdate
         private static InstallErrorCode ClassifyExceptionErrorCode(Exception ex)
         {
             var msg = ex.Message ?? "";
-            if (msg.Contains("APP_NOT_OWNED") || msg.Contains("-10"))
+            if (msg.Contains("APP_NOT_OWNED"))
                 return InstallErrorCode.ErrorAppNotOwned;
-            if (msg.Contains("PLAY_STORE_NOT_FOUND") || msg.Contains("-9"))
+            if (msg.Contains("PLAY_STORE_NOT_FOUND"))
                 return InstallErrorCode.ErrorPlayStoreNotFound;
+
+            // Substring matching is wrong for these codes and defaulted the wrong way: "-10"
+            // is a prefix of ERROR_INTERNAL_ERROR (-100) and of every other -10x code, so a
+            // retryable internal failure was reported as the non-retryable APP_NOT_OWNED and
+            // the retry was abandoned. Parse each number out and compare it as a number.
+            foreach (Match m in NegativeCodePattern.Matches(msg))
+            {
+                if (!int.TryParse(m.Value, out int code))
+                    continue;
+                if (code == -10)
+                    return InstallErrorCode.ErrorAppNotOwned;
+                if (code == -9)
+                    return InstallErrorCode.ErrorPlayStoreNotFound;
+            }
             return InstallErrorCode.ErrorInternalError;
         }
 
