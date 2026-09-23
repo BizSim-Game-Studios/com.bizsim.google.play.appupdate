@@ -5,9 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.4.5] - 2026-09-23
+
+### Changed
+- The mock provider and the diagnostic snapshot are gated at runtime by `Debug.isDebugBuild`
+  instead of `DEVELOPMENT_BUILD` (Unity 6.6 analyzer UAC0009); release behaviour is unchanged. The
+  dry-run validator names that gate.
 
 ### Fixed
+- The EditorTests assembly failed to compile (CS0122) against internal Editor members; the Editor
+  assembly now declares `InternalsVisibleTo` for it.
 - **`ClassifyExceptionErrorCode` matched error codes as substrings, so every `-10x` code was reported as `ERROR_APP_NOT_OWNED`.** `"-100"` (ERROR_INTERNAL_ERROR) contains `"-10"`, and the check ran before the fallthrough to `ErrorInternalError`. `AppUpdateError.IsRetryable` then returned false for a genuinely retryable failure, so the update was abandoned instead of retried and the telemetry named the wrong cause. The codes are now parsed out of the message and compared numerically; the `APP_NOT_OWNED` / `PLAY_STORE_NOT_FOUND` name matches are unchanged and still take precedence.
 - **The shipped default timeouts were inverted, so the package warned against its own factory configuration.** `DefaultTimeoutSeconds` defaulted to 60s while `WatchdogTimeoutSeconds` defaulted to 15s, and `AppUpdateBuildValidator` correctly flags `Watchdog < DefaultTimeout`. `FetchInfoWithWatchdog` passes the provider both the budget and the watchdog token, so the shorter one wins: the watchdog always pre-empted, `DefaultTimeoutSeconds` never fired, and callers got a blunt cancellation rather than the provider's typed timeout. The field default is now 12s, restoring the intended `Watchdog > DefaultTimeout` relationship. `DefaultTimeoutSecondsFallback` (60s) is deliberately unchanged - it serves the no-Settings-asset path and `ImmediateUpdateController.IsImmediateUpdateInProgressAsync`, neither of which is watchdog-wrapped.
 - **Consumers with an existing Settings asset are NOT fixed by this change** and must edit it: a `public` field default only applies to newly created assets. Any project whose `AppUpdateSettings.asset` still has `WatchdogTimeoutSeconds < DefaultTimeoutSeconds` keeps both the warning and the lost typed timeout.
