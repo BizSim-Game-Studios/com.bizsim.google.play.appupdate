@@ -93,8 +93,7 @@ namespace BizSim.Google.Play.AppUpdate
             _installStateStream    = new InstallStateStream(maxCapacity: queueCap);
 
 #if UNITY_ANDROID && !UNITY_EDITOR
-  #if DEVELOPMENT_BUILD
-            if (_settings != null && _settings.UseMockInDevelopmentBuild)
+            if (Debug.isDebugBuild && _settings != null && _settings.UseMockInDevelopmentBuild)
             {
                 var mock = new MockAppUpdateProvider(_mockConfig);
                 _infoProvider  = mock;
@@ -104,7 +103,6 @@ namespace BizSim.Google.Play.AppUpdate
                 BizSimLogger.Info("Development build: using MockAppUpdateProvider per AppUpdateSettings.UseMockInDevelopmentBuild");
             }
             else
-  #endif
             {
                 _infoProvider  = new AndroidAppUpdateInfoProvider();
                 _flexible      = new FlexibleUpdateController();
@@ -245,15 +243,15 @@ namespace BizSim.Google.Play.AppUpdate
         public bool WriteDiagnosticSnapshot(string path)
         {
             EnsureMainThread();
-#if DEVELOPMENT_BUILD || UNITY_EDITOR
+            if (!Debug.isDebugBuild)
+            {
+                BizSimLogger.Warning("WriteDiagnosticSnapshot disabled in release builds");
+                return false;
+            }
             var snapshot = GetDiagnosticSnapshot();
             System.IO.File.WriteAllText(path, snapshot.ToJson());
             BizSimLogger.Info($"Diagnostic snapshot written to {path}");
             return true;
-#else
-            BizSimLogger.Warning("WriteDiagnosticSnapshot disabled in release builds");
-            return false;
-#endif
         }
 
         /// <summary>

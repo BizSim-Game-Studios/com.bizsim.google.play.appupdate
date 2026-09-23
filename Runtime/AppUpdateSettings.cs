@@ -40,7 +40,7 @@ namespace BizSim.Google.Play.AppUpdate
         public BizSimLogger.LogLevel LogLevel = BizSimLogger.LogLevel.Info;
 
         [Header("Development")]
-        [Tooltip("If true AND the build is DEVELOPMENT_BUILD, the controller swaps the Android provider for MockAppUpdateProvider. Release builds always use the Android provider.")]
+        [Tooltip("If true AND the build is a Development Build (Debug.isDebugBuild), the controller swaps the Android provider for MockAppUpdateProvider. Release builds always use the Android provider.")]
         public bool UseMockInDevelopmentBuild = false;
 
         [Header("Analytics")]

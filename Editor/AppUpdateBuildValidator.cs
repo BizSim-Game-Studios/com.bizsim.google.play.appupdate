@@ -106,7 +106,7 @@ namespace BizSim.Google.Play.AppUpdate.Editor
                 {
                     Debug.LogWarning(BizSimLogger.Prefix +
                         "DryRunMode is enabled in AppUpdateSettings but this is a release build. " +
-                        "Dry-run mode only takes effect in DEVELOPMENT_BUILD — it will be inactive in this build. " +
+                        "Dry-run mode only takes effect in a development build (Debug.isDebugBuild) — it will be inactive in this build. " +
                         "Consider disabling it to avoid confusion.");
                 }
             }
