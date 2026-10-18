@@ -16,8 +16,14 @@ import com.google.android.play.core.install.model.UpdateAvailability;
 
 import com.google.android.gms.tasks.Task;
 
+import java.util.concurrent.Executor;
+import java.util.concurrent.Executors;
+
 public final class AppUpdateBridge {
     private static final String TAG = "BizSimAppUpdate";
+
+    // Single thread keeps install-state updates ordered; keeps the Android UI thread out of the IL2CPP attach lock.
+    static final Executor CALLBACK_EXECUTOR = Executors.newSingleThreadExecutor();
 
     public static final int REQ_FLEXIBLE  = 0x42F1;
     public static final int REQ_IMMEDIATE = 0x42F2;
@@ -83,7 +89,7 @@ public final class AppUpdateBridge {
         mainHandler.post(() -> {
             try {
                 Task<AppUpdateInfo> task = manager.getAppUpdateInfo();
-                task.addOnCompleteListener(t -> {
+                task.addOnCompleteListener(CALLBACK_EXECUTOR, t -> {
                     if (t.isSuccessful()) {
                         AppUpdateInfo info = t.getResult();
                         Integer staleness = info.clientVersionStalenessDays();
@@ -104,7 +110,8 @@ public final class AppUpdateBridge {
                     }
                 });
             } catch (Throwable thr) {
-                cb.onInfoError(-100, thr.getMessage() == null ? "" : thr.getMessage());
+                final String msg = thr.getMessage() == null ? "" : thr.getMessage();
+                CALLBACK_EXECUTOR.execute(() -> cb.onInfoError(-100, msg));
             }
         });
     }
@@ -114,7 +121,8 @@ public final class AppUpdateBridge {
             try {
                 manager.getAppUpdateInfo().addOnCompleteListener(t -> {
                     if (!t.isSuccessful()) {
-                        cb.onLaunchError(-100, t.getException() != null ? t.getException().getMessage() : "info failed");
+                        final String infoMsg = t.getException() != null ? t.getException().getMessage() : "info failed";
+                        CALLBACK_EXECUTOR.execute(() -> cb.onLaunchError(-100, infoMsg));
                         return;
                     }
                     AppUpdateInfo info = t.getResult();
@@ -127,16 +135,18 @@ public final class AppUpdateBridge {
                     try {
                         boolean ok = manager.startUpdateFlowForResult(info, activity, opts, reqCode);
                         if (ok) {
-                            cb.onLaunched();
+                            CALLBACK_EXECUTOR.execute(() -> cb.onLaunched());
                         } else {
-                            cb.onLaunchError(-5, "update type not allowed");
+                            CALLBACK_EXECUTOR.execute(() -> cb.onLaunchError(-5, "update type not allowed"));
                         }
                     } catch (android.content.IntentSender.SendIntentException sise) {
-                        cb.onLaunchError(-100, sise.getMessage() == null ? "" : sise.getMessage());
+                        final String sendMsg = sise.getMessage() == null ? "" : sise.getMessage();
+                        CALLBACK_EXECUTOR.execute(() -> cb.onLaunchError(-100, sendMsg));
                     }
                 });
             } catch (Throwable thr) {
-                cb.onLaunchError(-100, thr.getMessage() == null ? "" : thr.getMessage());
+                final String msg = thr.getMessage() == null ? "" : thr.getMessage();
+                CALLBACK_EXECUTOR.execute(() -> cb.onLaunchError(-100, msg));
             }
         });
     }
@@ -145,11 +155,12 @@ public final class AppUpdateBridge {
         mainHandler.post(() -> {
             try {
                 Task<Void> task = manager.completeUpdate();
-                task.addOnSuccessListener(unused -> cb.onCompleteInvoked());
-                task.addOnFailureListener(e ->
+                task.addOnSuccessListener(CALLBACK_EXECUTOR, unused -> cb.onCompleteInvoked());
+                task.addOnFailureListener(CALLBACK_EXECUTOR, e ->
                     cb.onCompleteError(-100, e.getMessage() == null ? "" : e.getMessage()));
             } catch (Throwable thr) {
-                cb.onCompleteError(-100, thr.getMessage() == null ? "" : thr.getMessage());
+                final String msg = thr.getMessage() == null ? "" : thr.getMessage();
+                CALLBACK_EXECUTOR.execute(() -> cb.onCompleteError(-100, msg));
             }
         });
     }

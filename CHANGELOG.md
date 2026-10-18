@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.6] - 2026-10-18
+
+### Fixed
+- **Bridge callbacks into C# no longer run on the Android UI thread.** `AppUpdateBridge`, `InstallStateListenerBridge` and `AppUpdateResultFragment` called the `AndroidJavaProxy` callbacks from Play Services task listeners and `onActivityResult`, all on the main looper. Entering C# makes Unity attach the calling thread to IL2CPP, which waits on the `ScriptingMemoryAllocator` lock; when another thread held it during a resume, the UI thread stopped dispatching input and Android raised an ANR (`onInfoReceived`, `Baselib_SystemFutex_Wait`). Every callback now goes through one single-thread executor (`AppUpdateBridge.CALLBACK_EXECUTOR`), which also keeps install-state updates in order. `startUpdateFlowForResult` still runs on the main looper because it needs the activity's thread.
+
 ## [1.4.5] - 2026-09-23
 
 ### Changed

@@ -58,9 +58,10 @@ public final class AppUpdateResultFragment extends Fragment {
         int inAppCode = (resultCode == ActivityResult.RESULT_IN_APP_UPDATE_FAILED)
             ? ActivityResult.RESULT_IN_APP_UPDATE_FAILED : 0;
 
-        if (pendingCallback != null) {
-            pendingCallback.onActivityResult(resultCode, inAppCode);
+        final AppUpdateBridge.IFlowLaunchCallback cb = pendingCallback;
+        if (cb != null) {
             pendingCallback = null;
+            AppUpdateBridge.CALLBACK_EXECUTOR.execute(() -> cb.onActivityResult(resultCode, inAppCode));
         }
     }
 }

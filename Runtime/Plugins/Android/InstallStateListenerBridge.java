@@ -21,12 +21,13 @@ public final class InstallStateListenerBridge {
     public synchronized void register() {
         if (registered) return;
         listener = state -> {
-            if (callback == null) return;
-            callback.onStateUpdate(
-                state.installStatus(),
-                state.bytesDownloaded(),
-                state.totalBytesToDownload(),
-                state.installErrorCode());
+            final AppUpdateBridge.IInstallStateCallback cb = callback;
+            if (cb == null) return;
+            final int status = state.installStatus();
+            final long downloaded = state.bytesDownloaded();
+            final long total = state.totalBytesToDownload();
+            final int errorCode = state.installErrorCode();
+            AppUpdateBridge.CALLBACK_EXECUTOR.execute(() -> cb.onStateUpdate(status, downloaded, total, errorCode));
         };
         manager.registerListener(listener);
         registered = true;
