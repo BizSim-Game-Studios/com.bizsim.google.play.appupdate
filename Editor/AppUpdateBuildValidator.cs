@@ -23,11 +23,10 @@ namespace BizSim.Google.Play.AppUpdate.Editor
             if (!HasEdm4U())
             {
                 Debug.LogWarning(BizSimLogger.Prefix +
-                    "EDM4U not detected at build time even though this package declares " +
-                    "'com.google.external-dependency-manager:1.2.187' as a UPM dependency. " +
-                    "This usually means the host project is missing the OpenUPM scoped registry entry. " +
-                    "Add the registry to Packages/manifest.json (see this package's README.md Installation section) " +
-                    "and re-import the package, then run Android Resolver → Force Resolve to pull " +
+                    "External Dependency Manager not detected at build time even though this package declares " +
+                    "'com.unity.external-dependency-manager:2.1.0' as a UPM dependency. " +
+                    "This usually means the dependency failed to resolve (Unity Registry unreachable) or the project disabled its resolver. " +
+                    "Check Window → Package Manager, re-import the package, then run Android Resolver → Force Resolve to pull " +
                     "'com.google.android.play:app-update:2.1.0' and 'androidx.fragment:fragment:1.8.9'.");
             }
 
