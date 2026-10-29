@@ -10,6 +10,9 @@ namespace BizSim.Google.Play.AppUpdate
     /// </summary>
     public interface IAppUpdateInfoProvider
     {
+        /// <summary>False on players with no Play in-app update API (iOS, standalone, WebGL): no update is ever reported.</summary>
+        bool IsSupported => true;
+
         /// <summary>
         /// Callers MUST pass a positive, resolved timeoutSeconds — the controller does sentinel
         /// resolution against <c>AppUpdateSettings.DefaultTimeoutSeconds</c> BEFORE delegating here.

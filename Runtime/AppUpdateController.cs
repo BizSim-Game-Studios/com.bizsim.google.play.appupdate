@@ -71,6 +71,9 @@ namespace BizSim.Google.Play.AppUpdate
         // on background thread before UnityMainThreadDispatcher marshals.
         private readonly object _stateLock = new object();
         private InstallState? _lastState;
+        /// <summary>False when the player has no Play in-app update API (iOS, standalone, WebGL).</summary>
+        public bool IsSupported => _infoProvider != null && _infoProvider.IsSupported;
+
         public InstallState? LastObservedState { get { lock (_stateLock) { return _lastState; } } }
 
         public event Action<AppUpdateInfo>  OnUpdateInfoReceived;
@@ -109,12 +112,19 @@ namespace BizSim.Google.Play.AppUpdate
                 _immediate     = new ImmediateUpdateController();
                 _stateListener = new InstallStateListenerController();
             }
-#else
+#elif UNITY_EDITOR
             var mock = new MockAppUpdateProvider(_mockConfig);
             _infoProvider  = mock;
             _flexible      = mock;
             _immediate     = mock;
             _stateListener = mock;
+#else
+            // iOS, standalone, WebGL: no Play in-app update API and no mock in a player.
+            var unsupported = new UnsupportedAppUpdateProvider();
+            _infoProvider  = unsupported;
+            _flexible      = unsupported;
+            _immediate     = unsupported;
+            _stateListener = unsupported;
 #endif
 
             _stateListener.OnStateUpdate += HandleState;
